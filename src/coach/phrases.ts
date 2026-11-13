@@ -39,8 +39,7 @@ export const PHRASES = {
   cam_down: p("photographer", "Tilt the phone down a little.", "Înclină telefonul puțin în jos."),
   cam_closer: p("photographer", "Move a little closer.", "Apropie-te puțin."),
   cam_back: p("photographer", "Move back a little.", "Depărtează-te puțin."),
-  cam_level_cw: p("photographer", "Straighten the phone: rotate it slightly to the right.", "Îndreaptă telefonul: rotește-l puțin spre dreapta."),
-  cam_level_ccw: p("photographer", "Straighten the phone: rotate it slightly to the left.", "Îndreaptă telefonul: rotește-l puțin spre stânga."),
+  cam_level: p("photographer", "Hold the phone straight.", "Ține telefonul drept."),
 
   // --- arms
   raise_left_arm: p("subject", "Raise your left arm a little.", "Ridică puțin brațul stâng."),
@@ -51,6 +50,10 @@ export const PHRASES = {
   bend_right_elbow: p("subject", "Bend your right elbow more.", "Îndoaie mai mult cotul drept."),
   straighten_left_arm: p("subject", "Straighten your left arm a little.", "Întinde puțin brațul stâng."),
   straighten_right_arm: p("subject", "Straighten your right arm a little.", "Întinde puțin brațul drept."),
+  hand_in_left: p("subject", "Bring your left hand in toward your body.", "Adu mâna stângă mai aproape de corp."),
+  hand_in_right: p("subject", "Bring your right hand in toward your body.", "Adu mâna dreaptă mai aproape de corp."),
+  hand_out_left: p("subject", "Move your left hand away from your body.", "Depărtează mâna stângă de corp."),
+  hand_out_right: p("subject", "Move your right hand away from your body.", "Depărtează mâna dreaptă de corp."),
 
   // --- legs
   bend_left_knee: p("subject", "Bend your left knee a little.", "Îndoaie puțin genunchiul stâng."),

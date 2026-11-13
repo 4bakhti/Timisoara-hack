@@ -1,0 +1,153 @@
+import { describe, expect, it } from "vitest";
+import type { Box } from "@/lib/contracts";
+import { angleDiff, jointBend, mirrorFeatures, poseFeatures, templateToImage } from "./geometry";
+import { matchAll, matchFraming, matchPose } from "./match";
+import { buildPose, type PoseSpec } from "./poses/build";
+import { POSE_TEMPLATES, getPoseTemplate } from "./poses/catalog";
+
+const BOX: Box = { x: 0.3, y: 0.1, w: 0.4, h: 0.8 };
+const PORTRAIT = 3 / 4;
+
+const RELAXED: PoseSpec = {
+  lUpperArm: 9,
+  lForearm: 4,
+  rUpperArm: 11,
+  rForearm: 2,
+  lThigh: 4,
+  lShin: 0,
+  rThigh: 4,
+  rShin: 0,
+};
+
+const features = (spec: PoseSpec) => poseFeatures(buildPose(spec))!;
+
+describe("angles", () => {
+  it("wraps differences into (-180, 180]", () => {
+    expect(angleDiff(170, -170)).toBe(-20);
+    expect(angleDiff(-170, 170)).toBe(20);
+    expect(angleDiff(30, 10)).toBe(20);
+  });
+
+  it("measures a straight and a right-angled joint", () => {
+    expect(jointBend(10, 10)).toBe(180);
+    expect(jointBend(0, 90)).toBe(90);
+    expect(jointBend(undefined, 90)).toBeUndefined();
+  });
+
+  it("reads a build spec back as features", () => {
+    const f = features({ ...RELAXED, lUpperArm: 90, lForearm: 90 });
+    expect(f.lUpperArm).toBeCloseTo(90, 0);
+    expect(f.lForearm).toBeCloseTo(90, 0);
+    expect(f.rUpperArm).toBeCloseTo(11, 0);
+    expect(f.lean).toBeCloseTo(0, 0);
+  });
+
+  it("reads lean with the right sign", () => {
+    expect(features({ ...RELAXED, lean: 10 }).lean).toBeCloseTo(10, 0);
+    expect(features({ ...RELAXED, lean: -10 }).lean).toBeCloseTo(-10, 0);
+  });
+
+  it("mirroring swaps the sides", () => {
+    const f = features({ ...RELAXED, lUpperArm: 80 });
+    const m = mirrorFeatures(f);
+    expect(m.rUpperArm).toBeCloseTo(80, 0);
+    expect(m.lUpperArm).toBeCloseTo(11, 0);
+  });
+});
+
+describe("pose matching", () => {
+  it("scores every template 100 against itself, with nothing to correct", () => {
+    for (const t of POSE_TEMPLATES) {
+      const f = poseFeatures(t.points)!;
+      const m = matchPose(f, f);
+      expect(m.score, t.id).toBe(100);
+      expect(m.corrections, t.id).toHaveLength(0);
+    }
+  });
+
+  it("tells clearly different poses apart", () => {
+    const relaxed = poseFeatures(getPoseTemplate("relaxed-stand").points)!;
+    const armsUp = poseFeatures(getPoseTemplate("arms-up").points)!;
+    const crossed = poseFeatures(getPoseTemplate("arms-crossed").points)!;
+    expect(matchPose(relaxed, armsUp).score).toBeLessThan(60);
+    expect(matchPose(relaxed, crossed).score).toBeLessThan(80);
+  });
+
+  it("asks to lower an arm that is too high", () => {
+    const m = matchPose(features({ ...RELAXED, lUpperArm: 80, lForearm: 80 }), features(RELAXED));
+    expect(m.corrections[0].id).toBe("lower_left_arm");
+  });
+
+  it("asks to raise an arm that is too low", () => {
+    const target = features({ ...RELAXED, rUpperArm: 95, rForearm: 95 });
+    const m = matchPose(features(RELAXED), target);
+    expect(m.corrections[0].id).toBe("raise_right_arm");
+  });
+
+  it("asks to bend an elbow that is too straight", () => {
+    const target = features({ ...RELAXED, lUpperArm: 40, lForearm: -60 });
+    const live = features({ ...RELAXED, lUpperArm: 40, lForearm: 35 });
+    expect(matchPose(live, target).corrections.map((c) => c.id)).toContain("bend_left_elbow");
+  });
+
+  it("asks to stand straight when leaning and the pose is upright", () => {
+    const m = matchPose(features({ ...RELAXED, lean: 16 }), features(RELAXED));
+    expect(m.corrections.map((c) => c.id)).toContain("stand_straight");
+  });
+
+  it("accepts the mirror image of a one-sided pose", () => {
+    const template = features({ ...RELAXED, lUpperArm: 42, lForearm: -58 });
+    const mirroredLive = features({ ...RELAXED, lUpperArm: 11, lForearm: 2, rUpperArm: 42, rForearm: -58 });
+    const m = matchPose(mirroredLive, template);
+    expect(m.mirrored).toBe(true);
+    expect(m.score).toBeGreaterThan(90);
+  });
+
+  it("ignores limbs that are not visible", () => {
+    const template = poseFeatures(getPoseTemplate("arms-crossed").points)!;
+    const live = { ...template };
+    delete live.lThigh;
+    delete live.rThigh;
+    delete live.lShin;
+    delete live.rShin;
+    expect(matchPose(live, template).score).toBe(100);
+  });
+});
+
+describe("framing", () => {
+  const template = getPoseTemplate("relaxed-stand").points;
+
+  it("is perfect when the person stands exactly where the idea wants", () => {
+    const live = templateToImage(template, BOX, PORTRAIT);
+    const { pose, framing } = matchAll(live, template, BOX, PORTRAIT, "solo");
+    expect(pose?.score).toBe(100);
+    expect(framing?.score).toBeGreaterThanOrEqual(99);
+    expect(framing?.corrections).toHaveLength(0);
+  });
+
+  it("tells a solo subject who is too far to image right to step to their right", () => {
+    const shifted = { ...BOX, x: BOX.x + 0.2 };
+    const live = templateToImage(template, shifted, PORTRAIT);
+    expect(matchFraming(live, template, BOX, PORTRAIT, "solo")?.corrections[0].id).toBe("move_right");
+    expect(matchFraming(live, template, BOX, PORTRAIT, "friend")?.corrections[0].id).toBe("cam_right");
+  });
+
+  it("asks for more distance when the person fills too much of the frame", () => {
+    const bigger = { x: 0.2, y: 0.0, w: 0.6, h: 1 };
+    const live = templateToImage(template, bigger, PORTRAIT);
+    const solo = matchFraming(live, template, { x: 0.3, y: 0.2, w: 0.4, h: 0.6 }, PORTRAIT, "solo");
+    expect(solo?.corrections[0].id).toBe("step_back");
+    expect(solo?.sizeRatio).toBeGreaterThan(1.3);
+  });
+
+  it("asks the photographer to tilt down when the person sits low in the frame", () => {
+    const lower = { ...BOX, y: BOX.y + 0.14, h: BOX.h };
+    const live = templateToImage(template, lower, PORTRAIT);
+    const ids = matchFraming(live, template, BOX, PORTRAIT, "friend")?.corrections.map((c) => c.id);
+    expect(ids).toContain("cam_down");
+  });
+
+  it("returns null when the torso is not visible", () => {
+    expect(matchFraming({ nose: [0.5, 0.2] }, template, BOX, PORTRAIT, "solo")).toBeNull();
+  });
+});
