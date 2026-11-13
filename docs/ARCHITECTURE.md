@@ -86,7 +86,8 @@ All bodies and responses are defined in `src/lib/contracts.ts`.
 | `POST /api/review` | Before and after in, improvements and a lesson out |
 | `POST /api/preview` | AI sketch of the proposed shot (optional) |
 | `POST /api/speak` | Text in, speech audio out |
-| `POST /api/events`, `POST /api/feedback`, `GET/POST /api/votes`, `GET /api/stats` | Numbers for user testing |
+| `POST /api/events`, `POST /api/feedback`, `GET /api/stats` | Numbers for user testing |
+| `POST /api/pairs`, `GET/POST /api/votes` | Opt-in before/after pairs and blind votes on them |
 | `GET/POST /api/recipes`, `GET /api/recipes/[id]` | Shareable shot recipes |
 
 Every route must work without its external service: when a key is missing it answers with sample data flagged `mock: true`, or with a `501` and `{ "error": "not_configured" }` where no sample makes sense.

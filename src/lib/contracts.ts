@@ -286,6 +286,17 @@ export type VotePair = z.infer<typeof VotePair>;
 export const VoteRequest = z.object({ pairId: z.string(), choice: z.enum(["a", "b"]) });
 export type VoteRequest = z.infer<typeof VoteRequest>;
 
+/** Opt-in only: a user offers their own before/after pair for blind voting. */
+export const PairCreateRequest = z.object({
+  before: ImageData,
+  after: ImageData,
+  consent: z.literal(true),
+});
+export type PairCreateRequest = z.infer<typeof PairCreateRequest>;
+
+export const PairCreateResponse = z.object({ pairId: z.string() });
+export type PairCreateResponse = z.infer<typeof PairCreateResponse>;
+
 /* -------------------------------------------------------- API: /api/recipes */
 
 /** A shot that someone else can open and recreate. */

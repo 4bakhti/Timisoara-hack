@@ -12,6 +12,7 @@ import {
   AnalyzeResponse,
   GuideResponse,
   Health,
+  PairCreateResponse,
   PreviewResponse,
   Recipe,
   ReviewResponse,
@@ -21,6 +22,7 @@ import {
   type EventsRequest,
   type FeedbackRequest,
   type GuideRequest,
+  type PairCreateRequest,
   type PreviewRequest,
   type RecipeCreateRequest,
   type ReviewRequest,
@@ -162,6 +164,15 @@ export const api = {
   async votePair(): Promise<VotePair | null> {
     try {
       return await request("/api/votes", VotePair);
+    } catch {
+      return null;
+    }
+  },
+
+  /** Offers a before/after pair for blind voting. Only call with the user's consent. */
+  async createPair(req: PairCreateRequest): Promise<string | null> {
+    try {
+      return (await post("/api/pairs", req, PairCreateResponse)).pairId;
     } catch {
       return null;
     }
