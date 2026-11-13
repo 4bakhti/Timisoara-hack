@@ -1,4 +1,4 @@
-/** Grabbing still images from the live camera. */
+/** Grabbing still images from the live camera (or from a picture, in demo mode). */
 
 export interface GrabbedFrame {
   blob: Blob;
@@ -9,7 +9,7 @@ export interface GrabbedFrame {
 }
 
 export interface GrabOptions {
-  /** Longest side of the result in pixels. Defaults to the camera's own resolution. */
+  /** Longest side of the result in pixels. Defaults to the source's own resolution. */
   maxSide?: number;
   /** Flip horizontally, to match a mirrored front-camera preview. */
   mirrored?: boolean;
@@ -17,10 +17,18 @@ export interface GrabOptions {
   quality?: number;
 }
 
-/** Copies the current video frame to a JPEG. Throws if the video has no frame yet. */
-export async function grabFrame(video: HTMLVideoElement, opts: GrabOptions = {}): Promise<GrabbedFrame> {
-  const srcW = video.videoWidth;
-  const srcH = video.videoHeight;
+export type FrameSource = HTMLVideoElement | HTMLImageElement;
+
+/** Pixel size of a video frame or an image. Zero when it has not loaded yet. */
+export function sourceSize(source: FrameSource): { width: number; height: number } {
+  return source instanceof HTMLVideoElement
+    ? { width: source.videoWidth, height: source.videoHeight }
+    : { width: source.naturalWidth, height: source.naturalHeight };
+}
+
+/** Copies the current frame to a JPEG. Throws if the source has no picture yet. */
+export async function grabFrame(source: FrameSource, opts: GrabOptions = {}): Promise<GrabbedFrame> {
+  const { width: srcW, height: srcH } = sourceSize(source);
   if (!srcW || !srcH) throw new Error("camera_not_ready");
 
   const longest = Math.max(srcW, srcH);
@@ -37,7 +45,7 @@ export async function grabFrame(video: HTMLVideoElement, opts: GrabOptions = {})
     ctx.translate(width, 0);
     ctx.scale(-1, 1);
   }
-  ctx.drawImage(video, 0, 0, width, height);
+  ctx.drawImage(source, 0, 0, width, height);
 
   const quality = opts.quality ?? 0.9;
   const blob = await new Promise<Blob>((resolve, reject) => {

@@ -145,7 +145,8 @@ const pct = z.number().min(0).max(100);
 /** Computed on the phone with the same function for the "before" and "after" photo. */
 export const ShotScore = z.object({
   total: pct,
-  framing: pct,
+  /** null when it could not be measured (a scene without a person and no AI guidance). */
+  framing: pct.nullable(),
   /** null when the device gives no tilt reading. */
   level: pct.nullable(),
   /** null when no person is expected or visible. */
