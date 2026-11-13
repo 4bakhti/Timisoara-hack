@@ -1,10 +1,22 @@
-# Timisoara-hack
+# Framewise
 
-Hackathon project for UNIHACK 8 (Timișoara, 13–15 November 2026).
+A camera coach in your phone's browser: point it at a scene, pick one of three suggested shots, and it guides the photographer and the person in the photo until the shot is right.
 
-**Status:** in development during the event. A description, setup instructions and credits will be added as the project takes shape.
+Hackathon project for UNIHACK 8 (Timișoara, 13–15 November 2026). **Status:** in development during the event.
+
+## Run it
+
+```bash
+npm install
+cp .env.example .env.local   # optional: add keys to switch on the AI features
+npm run dev                  # http://localhost:3000
+```
+
+Without keys the app runs on sample data. Camera access needs HTTPS or `localhost`.
 
 ## Contributing
 
-- Work on a branch and open a pull request. Keep `main` working.
-- Never commit secrets. Keys and passwords go in a local `.env` file, which git ignores.
+- Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) first: it explains the modules and who owns which folder.
+- Run `npm run check` before every push. Keep `main` working.
+- Never commit secrets. Keys go in `.env.local`, which git ignores.
+- List anything third-party in [docs/CREDITS.md](docs/CREDITS.md).
