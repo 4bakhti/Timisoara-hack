@@ -1,13 +1,16 @@
 /**
- * Chooses which tracker runs a coaching session.
+ * Chooses which engine runs a coaching session.
  *
- * For now every session uses the simulated tracker. The real one (body tracking
- * on the phone) plugs in here without any change to the hook or the screens.
+ *  - "sim": the scripted session, for demos and tests without a person.
+ *  - an idea with a pose: body tracking on the device.
+ *  - an idea without a person (objects, food, places): server-guided framing.
  */
+import { createGuideEngine } from "./guideEngine";
+import { createPoseEngine } from "./poseEngine";
 import { createSimEngine } from "./simEngine";
 import type { Engine, EngineConfig } from "./types";
 
 export function createEngine(cfg: EngineConfig, kind: "auto" | "sim" = "auto"): Engine {
-  void kind;
-  return createSimEngine(cfg);
+  if (kind === "sim") return createSimEngine(cfg);
+  return cfg.idea.subject ? createPoseEngine(cfg) : createGuideEngine(cfg);
 }

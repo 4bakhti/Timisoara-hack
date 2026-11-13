@@ -20,7 +20,8 @@ export type CoachPhase =
   | "error";
 
 export interface CoachInstruction {
-  id: PhraseId;
+  /** A fixed coach line, or "custom" for free text written for this scene. */
+  id: PhraseId | "custom";
   /** Already in the session language. */
   text: string;
   /** Who should act on it. In friend mode, show "photographer" lines on screen. */
@@ -38,8 +39,12 @@ export interface CoachState {
   countdown: number | null;
   personVisible: boolean;
   fps: number;
-  /** true when the simulated tracker is running instead of the real one. */
+  /** true when the scripted tracker is running instead of the real one. */
   simulated: boolean;
+  /**
+   * Set when phase is "error". "tracker_unavailable" means live tracking could not
+   * start on this device: the guides are still drawn and captureNow() still works.
+   */
   error: string | null;
 }
 
@@ -58,6 +63,11 @@ export interface CapturedShot {
 export interface CoachSessionOptions {
   /** The playing camera element, or null while it is not ready. */
   video: HTMLVideoElement | null;
+  /**
+   * A picture to coach on when there is no camera (desktop, demos, tests): a data
+   * URL, blob URL or address. Ignored when `video` is given.
+   */
+  still?: string | null;
   /** A canvas covering the video. The coach draws its guides here. May be null. */
   overlay: HTMLCanvasElement | null;
   idea: ShotIdea;
@@ -69,7 +79,10 @@ export interface CoachSessionOptions {
   voice?: boolean;
   /** Stop coaching without tearing the session down. */
   paused?: boolean;
-  /** "sim" forces the simulated tracker (for demos and tests). Default "auto". */
+  /**
+   * "auto" (default) tracks the real person in front of the camera.
+   * "sim" runs a scripted session: use it for demos and tests without a person.
+   */
   engine?: "auto" | "sim";
   onCapture: (shot: CapturedShot) => void;
 }
@@ -83,7 +96,8 @@ export interface CoachSession extends CoachState {
 
 /** What an engine needs to run. Engines push state into `emit`. */
 export interface EngineConfig {
-  video: HTMLVideoElement;
+  /** The live camera, or a loaded picture standing in for it. */
+  source: HTMLVideoElement | HTMLImageElement;
   overlay: HTMLCanvasElement | null;
   idea: ShotIdea;
   mode: CoachMode;

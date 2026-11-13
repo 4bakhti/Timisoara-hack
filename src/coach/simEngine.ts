@@ -3,7 +3,7 @@
  * draws the same guides, so screens can be built, demoed and tested without a
  * person in front of the camera. State it reports is marked `simulated: true`.
  */
-import { coverMap, drawGuides, getPoseTemplate, grabFrame, syncCanvas } from "@/vision";
+import { coverMap, drawGuides, getPoseTemplate, grabFrame, sourceSize, syncCanvas } from "@/vision";
 import { phraseAudience, phraseText, type PhraseId } from "./phrases";
 import type { CoachInstruction, Engine, EngineConfig } from "./types";
 import { say, stopSpeaking } from "./voice";
@@ -47,7 +47,8 @@ export function createSimEngine(cfg: EngineConfig): Engine {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     const { width, height } = syncCanvas(canvas);
-    const map = coverMap(cfg.video.videoWidth || width, cfg.video.videoHeight || height, width, height);
+    const size = sourceSize(cfg.source);
+    const map = coverMap(size.width || width, size.height || height, width, height);
     drawGuides(ctx, { map, targetBox: cfg.idea.framing.subjectBox, ghost: template?.points, score });
   };
 
@@ -56,8 +57,8 @@ export function createSimEngine(cfg: EngineConfig): Engine {
     capturing = true;
     cancelAnimationFrame(raf);
     try {
-      const full = await grabFrame(cfg.video, { mirrored: cfg.mirrored, quality: 0.92 });
-      const small = await grabFrame(cfg.video, { mirrored: cfg.mirrored, maxSide: 1024, quality: 0.85 });
+      const full = await grabFrame(cfg.source, { mirrored: cfg.mirrored, quality: 0.92 });
+      const small = await grabFrame(cfg.source, { mirrored: cfg.mirrored, maxSide: 1024, quality: 0.85 });
       const total = Math.round(lastScore);
       cfg.emit({ phase: "captured", countdown: null, instruction: instruction("got_it") });
       speak("got_it");
