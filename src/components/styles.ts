@@ -2,7 +2,7 @@
 
 /** Small rounded button used over the camera. At least 44 px tall for thumbs. */
 export const pill =
-  "inline-flex min-h-11 items-center justify-center rounded-full bg-black/55 px-3 text-sm font-medium backdrop-blur active:scale-95 disabled:opacity-50";
+  "inline-flex min-h-11 min-w-11 items-center justify-center rounded-full bg-black/55 px-3 text-sm font-medium backdrop-blur active:scale-95 disabled:opacity-50";
 
 export const primary =
   "inline-flex min-h-12 w-full items-center justify-center rounded-full bg-green-400 px-5 py-3.5 text-center text-lg font-semibold text-black active:scale-[0.98] disabled:opacity-50";

@@ -529,7 +529,7 @@ function FlowCore({ recipe, onExit, round, demo = false, talk }: ShootFlowProps 
   );
 
   return (
-    <main className="relative mx-auto h-dvh w-full max-w-lg overflow-hidden bg-black text-white">
+    <main className="relative mx-auto h-dvh w-full max-w-lg overflow-hidden bg-black text-white landscape:max-w-none lg:max-w-none">
       <video ref={videoRef} playsInline muted className={`absolute inset-0 h-full w-full object-cover ${flipClass}`} />
       {picture && !live && (
         // eslint-disable-next-line @next/next/no-img-element -- a local picture standing in for the camera
@@ -542,7 +542,7 @@ function FlowCore({ recipe, onExit, round, demo = false, talk }: ShootFlowProps 
       )}
 
       {step === "intro" && (
-        <section className="absolute inset-0 flex flex-col justify-between gap-6 overflow-y-auto bg-neutral-950 p-6 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+        <section className="absolute inset-0 flex flex-col justify-between gap-6 overflow-y-auto bg-neutral-950 px-[max(1.5rem,calc((100%-32rem)/2))] py-6 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))]">
           <div className="flex items-center justify-between gap-2">
             {onExit ? (
               <button
@@ -621,7 +621,7 @@ function FlowCore({ recipe, onExit, round, demo = false, talk }: ShootFlowProps 
       )}
 
       {step === "camera" && (
-        <section className="absolute inset-0 flex flex-col justify-between gap-3 p-4 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))]">
+        <section className="absolute inset-0 flex flex-col justify-between gap-3 py-4 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))]">
           <div className="flex flex-wrap items-center gap-2">
             <button type="button" className={pill} onClick={leaveSource}>
               {t("back", lang)}
@@ -636,7 +636,7 @@ function FlowCore({ recipe, onExit, round, demo = false, talk }: ShootFlowProps 
               </button>
             )}
           </div>
-          <div className="grid gap-3">
+          <div className="grid w-full max-w-lg gap-3 self-center">
             {voiceControl}
             {problemNote}
             {recipe && (
@@ -663,12 +663,12 @@ function FlowCore({ recipe, onExit, round, demo = false, talk }: ShootFlowProps 
       )}
 
       {step === "ideas" && plan && (
-        <section className="absolute inset-0 flex flex-col overflow-y-auto bg-gradient-to-t from-black/85 via-black/30 to-transparent pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))]">
-          {voiceControl && <div className="px-4">{voiceControl}</div>}
+        <section className="absolute inset-0 flex flex-col overflow-y-auto bg-gradient-to-t from-black/85 via-black/30 to-transparent pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))]">
+          {voiceControl && <div>{voiceControl}</div>}
           <div className="mt-auto">
-            <div className="flex items-center justify-between gap-2 px-4 pb-3">
-              <h2 className="text-2xl font-semibold">{t("pickShot", lang)}</h2>
-              <span className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 pb-3">
+              <h2 className="text-2xl font-semibold drop-shadow-[0_1px_6px_rgba(0,0,0,0.7)]">{t("pickShot", lang)}</h2>
+              <span className="flex flex-wrap items-center gap-2">
                 {demo ? <span className={demoTag}>{t("demoBadge", lang)}</span> : mock && <span className={sampleTag}>{t("sample", lang)}</span>}
                 <button type="button" className={pill} onClick={() => setStep("camera")}>
                   {t("back", lang)}
@@ -676,7 +676,7 @@ function FlowCore({ recipe, onExit, round, demo = false, talk }: ShootFlowProps 
               </span>
             </div>
             {mock && (
-              <div className="grid gap-1 px-4 pb-3">
+              <div className="mb-3 grid gap-1 rounded-xl bg-black/75 p-3 backdrop-blur">
                 <p className="text-sm leading-snug text-amber-200">{t(demo ? "demoIdeasNote" : "sampleIdeasNote", lang)}</p>
                 {!demo && (
                   <Link href="/demo" className="text-sm text-neutral-300 underline underline-offset-4">
@@ -685,7 +685,7 @@ function FlowCore({ recipe, onExit, round, demo = false, talk }: ShootFlowProps 
                 )}
               </div>
             )}
-            <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2">
+            <div className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2">
               {plan.ideas.map((item) => (
                 <IdeaCard key={item.id} idea={item} lang={lang} onUse={() => choose(item)} />
               ))}
@@ -695,7 +695,7 @@ function FlowCore({ recipe, onExit, round, demo = false, talk }: ShootFlowProps 
       )}
 
       {coaching && (
-        <section className="absolute inset-0 flex flex-col justify-between p-4 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))]">
+        <section className="absolute inset-0 flex flex-col justify-between py-4 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))]">
           <div className="flex items-start justify-between gap-2">
             <div className="flex flex-wrap items-center gap-2">
               <button type="button" className={pill} onClick={() => setStep(plan && !recipe ? "ideas" : "camera")}>
@@ -714,7 +714,7 @@ function FlowCore({ recipe, onExit, round, demo = false, talk }: ShootFlowProps 
             </p>
           )}
 
-          <div className="grid gap-3">
+          <div className="grid w-full max-w-lg gap-3 self-center">
             {voiceControl}
             {paused && (
               <div className="flex items-center justify-between gap-3 rounded-2xl bg-black/75 px-4 py-2 backdrop-blur" role="status">
@@ -744,7 +744,7 @@ function FlowCore({ recipe, onExit, round, demo = false, talk }: ShootFlowProps 
       )}
 
       {step === "result" && shot && idea && (
-        <section className="absolute inset-0 overflow-y-auto bg-neutral-950 p-4 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(2rem,env(safe-area-inset-bottom))]">
+        <section className="absolute inset-0 overflow-y-auto bg-neutral-950 px-[max(1rem,calc((100%-32rem)/2))] py-4 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(2rem,env(safe-area-inset-bottom))]">
           {demo && <p className="mb-3"><span className={demoTag}>{t("demoBadge", lang)}</span></p>}
           {recipe && <h1 className="mb-3 text-xl font-semibold leading-tight">{recipe.title}</h1>}
 
@@ -756,7 +756,7 @@ function FlowCore({ recipe, onExit, round, demo = false, talk }: ShootFlowProps 
               <figure key={side.label}>
                 {side.src && (
                   // eslint-disable-next-line @next/next/no-img-element -- captured frames, data URLs
-                  <img src={side.src} alt={side.label} className="aspect-[3/4] w-full rounded-xl object-cover" />
+                  <img src={side.src} alt={side.label} className="aspect-[3/4] w-full rounded-xl object-cover landscape:mx-auto landscape:max-h-[70dvh] landscape:w-auto" />
                 )}
                 <figcaption className="mt-2 flex items-baseline justify-between">
                   <span className="text-sm text-neutral-400">{side.label}</span>

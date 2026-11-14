@@ -54,7 +54,7 @@ export function FramingDiagram({ idea, className }: { idea: ShotIdea; className?
 
 export function IdeaCard({ idea, lang, onUse }: { idea: ShotIdea; lang: Lang; onUse: () => void }) {
   return (
-    <article className="flex w-[84%] shrink-0 snap-center flex-col gap-3 rounded-2xl bg-neutral-900/95 p-4 ring-1 ring-white/10">
+    <article className="flex w-[84%] max-w-sm shrink-0 snap-center flex-col gap-3 rounded-2xl bg-neutral-900/95 p-4 ring-1 ring-white/10">
       <div className="flex gap-3">
         <FramingDiagram idea={idea} />
         <div className="min-w-0">
