@@ -60,6 +60,22 @@ export interface CapturedShot {
   manual: boolean;
 }
 
+export interface CoachSpeechLine {
+  instruction: CoachInstruction;
+  ideaId: string;
+  lang: Lang;
+  kind: "correction" | "countdown" | "capture";
+}
+
+export interface CoachSpeech {
+  say(line: CoachSpeechLine): void;
+  cancel(): void;
+}
+
+export type CoachCaptureResult =
+  | { ok: true; outcome: "captured" }
+  | { ok: false; reason: "camera_not_ready" | "capture_in_progress" | "already_captured" | "capture_failed" | "stale" };
+
 export interface CoachSessionOptions {
   /** The playing camera element, or null while it is not ready. */
   video: HTMLVideoElement | null;
@@ -77,6 +93,8 @@ export interface CoachSessionOptions {
   mirrored?: boolean;
   /** Speak corrections aloud. Call unlockAudio() from a tap first. */
   voice?: boolean;
+  /** Optional owner of both correction and countdown audio. */
+  speech?: CoachSpeech;
   /** Stop coaching without tearing the session down. */
   paused?: boolean;
   /**
@@ -90,6 +108,10 @@ export interface CoachSessionOptions {
 export interface CoachSession extends CoachState {
   /** Take the photo now, without waiting for a match. */
   captureNow: () => void;
+  /** Use the manual shutter from a voice action and wait for the actual shot. */
+  requestCapture: (signal?: AbortSignal) => Promise<CoachCaptureResult>;
+  /** Stop the current engine synchronously before changing idea or pausing. */
+  cancelPendingCapture: () => void;
   /** Start coaching the same idea again after a capture. */
   restart: () => void;
 }
@@ -104,6 +126,7 @@ export interface EngineConfig {
   lang: Lang;
   mirrored: boolean;
   voice: boolean;
+  speech?: CoachSpeech;
   emit: (patch: Partial<CoachState>) => void;
   onCapture: (shot: CapturedShot) => void;
 }
@@ -111,7 +134,7 @@ export interface EngineConfig {
 export interface Engine {
   start(): void;
   stop(): void;
-  captureNow(): void;
+  captureNow(signal?: AbortSignal): Promise<CoachCaptureResult>;
 }
 
 export const INITIAL_COACH_STATE: CoachState = {

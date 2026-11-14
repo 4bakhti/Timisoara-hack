@@ -22,9 +22,8 @@ import {
 import { getStillTracker } from "@/vision/score";
 import type { PoseTracker } from "@/vision/tracker";
 import { CoachBrain, levelScore } from "./brain";
-import { clearOverlay, createRecorder, toInstruction } from "./engineShared";
-import type { Engine, EngineConfig } from "./types";
-import { say, stopSpeaking } from "./voice";
+import { cancelCoachSpeech, captureRejection, clearOverlay, createRecorder, playCoachLine, toInstruction } from "./engineShared";
+import type { CoachCaptureResult, Engine, EngineConfig } from "./types";
 
 const MIN_FRAME_MS = 30;
 const SMOOTHING = 0.5;
@@ -87,13 +86,22 @@ export function createPoseEngine(cfg: EngineConfig): Engine {
     });
   };
 
-  const capture = async (manual: boolean) => {
-    if (capturing || stopped) return;
+  const capture = async (manual: boolean, signal?: AbortSignal): Promise<CoachCaptureResult> => {
+    const rejection = captureRejection(capturing, captured, stopped, signal);
+    if (rejection) return rejection;
     capturing = true;
+    cancelCoachSpeech(cfg);
     cancelAnimationFrame(raf);
     try {
       const full = await grabFrame(cfg.source, { mirrored: cfg.mirrored, quality: 0.92 });
       const small = await grabFrame(cfg.source, { mirrored: cfg.mirrored, maxSide: 1024, quality: 0.85 });
+      if (stopped || signal?.aborted) {
+        capturing = false;
+        if (!stopped) {
+          raf = requestAnimationFrame(tick);
+        }
+        return { ok: false, reason: "stale" };
+      }
       const size = sourceSize(cfg.source);
       const score = computeShotScore({
         pose: lastPose,
@@ -105,7 +113,7 @@ export function createPoseEngine(cfg: EngineConfig): Engine {
       });
       captured = true;
       cfg.emit({ phase: "captured", countdown: null, instruction: toInstruction("got_it", cfg), error: null });
-      if (manual && cfg.voice) void say("got_it", cfg.lang);
+      playCoachLine(cfg, toInstruction("got_it", cfg), "capture");
       recorder.flush(manual ? "captured-manually" : "captured");
       cfg.onCapture({
         blob: full.blob,
@@ -115,9 +123,14 @@ export function createPoseEngine(cfg: EngineConfig): Engine {
         score,
         manual,
       });
-    } catch (err) {
+      return { ok: true, outcome: "captured" };
+    } catch {
+      if (stopped) return { ok: false, reason: "stale" };
       capturing = false;
-      cfg.emit({ phase: "error", error: err instanceof Error ? err.message : "capture_failed" });
+      if (manual) raf = requestAnimationFrame(tick);
+      if (signal?.aborted) return { ok: false, reason: "stale" };
+      cfg.emit({ phase: "error", countdown: null, error: "capture_failed" });
+      return { ok: false, reason: "capture_failed" };
     }
   };
 
@@ -159,6 +172,10 @@ export function createPoseEngine(cfg: EngineConfig): Engine {
       levelError,
     });
 
+    if (decision.capture) {
+      void capture(false);
+      return;
+    }
     cfg.emit({
       phase: decision.phase,
       score: decision.score,
@@ -170,7 +187,10 @@ export function createPoseEngine(cfg: EngineConfig): Engine {
       simulated: false,
       error: null,
     });
-    if (decision.speak && cfg.voice) void say(decision.speak, cfg.lang);
+    if (decision.speak) {
+      const kind = decision.phase === "holding" || decision.phase === "countdown" ? "countdown" : "correction";
+      playCoachLine(cfg, toInstruction(decision.speak, cfg), kind);
+    }
     recorder.sample(now, {
       score: decision.score,
       pose: decision.parts.pose,
@@ -179,7 +199,6 @@ export function createPoseEngine(cfg: EngineConfig): Engine {
       fps: Math.round(fps),
     });
     draw(visible ? points : null, decision.score);
-    if (decision.capture) void capture(false);
   };
 
   const boot = async () => {
@@ -192,7 +211,7 @@ export function createPoseEngine(cfg: EngineConfig): Engine {
       }
     } catch {
       trackerFailed = true;
-      cfg.emit({ phase: "error", error: "tracker_unavailable" });
+      if (!stopped && !captured) cfg.emit({ phase: "error", error: "tracker_unavailable" });
     }
     if (stopped) {
       tracker?.close();
@@ -217,12 +236,12 @@ export function createPoseEngine(cfg: EngineConfig): Engine {
       stopLevel();
       tracker?.close();
       tracker = null;
-      stopSpeaking();
+      cancelCoachSpeech(cfg);
       clearOverlay(cfg.overlay);
       if (!captured) recorder.flush("abandoned");
     },
-    captureNow() {
-      void capture(true);
+    captureNow(signal) {
+      return capture(true, signal);
     },
   };
 }

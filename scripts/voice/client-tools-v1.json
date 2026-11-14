@@ -1,0 +1,68 @@
+[
+  {
+    "type": "client",
+    "name": "select_idea",
+    "description": "Select an idea the user asked for by its exact ID from the latest Framewise snapshot.",
+    "expects_response": true,
+    "pre_tool_speech": "off",
+    "response_timeout_secs": 8,
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "ideaId": {
+          "type": "string",
+          "description": "Exact ID of the requested idea from the current snapshot."
+        }
+      },
+      "required": [
+        "ideaId"
+      ]
+    }
+  },
+  {
+    "type": "client",
+    "name": "set_coaching_paused",
+    "description": "Pause or resume coaching when the user explicitly asks. A pause cancels a countdown.",
+    "expects_response": true,
+    "pre_tool_speech": "off",
+    "response_timeout_secs": 8,
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "paused": {
+          "type": "boolean",
+          "description": "True to pause coaching, false to resume it."
+        }
+      },
+      "required": [
+        "paused"
+      ]
+    }
+  },
+  {
+    "type": "client",
+    "name": "repeat_instruction",
+    "description": "Get the latest grounded coaching correction when the user asks to hear it again or asks what the last instruction meant.",
+    "expects_response": true,
+    "pre_tool_speech": "off",
+    "response_timeout_secs": 8,
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
+  },
+  {
+    "type": "client",
+    "name": "request_capture",
+    "description": "Request the existing app shutter after an explicit request to take a photo. Wait for the actual result.",
+    "expects_response": true,
+    "pre_tool_speech": "off",
+    "response_timeout_secs": 8,
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
+  }
+]

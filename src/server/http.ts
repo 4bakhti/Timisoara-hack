@@ -9,17 +9,33 @@ export function fail(status: number, error: string, message?: string): Response 
 
 const MAX_BODY_BYTES = 3_000_000;
 
-/** Parses and validates a JSON body. Returns the data, or the error response to send. */
-export async function readBody<T>(request: Request, schema: ZodType<T>): Promise<{ data: T } | { response: Response }> {
+/** Parses and validates a JSON body, enforcing the limit as bytes arrive. */
+export async function readBody<T>(request: Request, schema: ZodType<T>, maxBytes = MAX_BODY_BYTES): Promise<{ data: T } | { response: Response }> {
   const declared = Number(request.headers.get("content-length") ?? "0");
-  if (declared > MAX_BODY_BYTES) return { response: fail(413, "too_large") };
-  let text: string;
+  if (declared > maxBytes) return { response: fail(413, "too_large") };
+  const reader = request.body?.getReader();
+  if (!reader) return { response: fail(400, "bad_request") };
+
+  let text = "";
+  let total = 0;
+  const decoder = new TextDecoder();
   try {
-    text = await request.text();
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        void reader.cancel().catch(() => undefined);
+        return { response: fail(413, "too_large") };
+      }
+      text += decoder.decode(value, { stream: true });
+    }
+    text += decoder.decode();
   } catch {
     return { response: fail(400, "bad_request") };
+  } finally {
+    reader.releaseLock();
   }
-  if (text.length > MAX_BODY_BYTES) return { response: fail(413, "too_large") };
   let raw: unknown;
   try {
     raw = JSON.parse(text);
@@ -52,6 +68,13 @@ export class RateLimiter {
     if (this.hits.size > 5000) this.hits.clear(); // Never grow without bound.
     return true;
   }
+}
+
+/** Browser requests to paid guest endpoints must originate on the app's site. */
+export function isSameOriginRequest(request: Request): boolean {
+  const origin = request.headers.get("origin");
+  if (request.headers.get("sec-fetch-site") === "cross-site") return false;
+  return origin === null || origin === new URL(request.url).origin;
 }
 
 export function clientKey(request: Request): string {

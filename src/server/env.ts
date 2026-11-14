@@ -18,6 +18,8 @@ export const env = {
   geminiFastModel: () => read("GEMINI_FAST_MODEL") ?? "gemini-3.5-flash-lite",
   elevenLabsKey: () => read("ELEVENLABS_API_KEY"),
   elevenLabsVoice: () => read("ELEVENLABS_VOICE_ID"),
+  elevenLabsRomanianVoice: () => read("ELEVENLABS_VOICE_ID_RO"),
+  elevenLabsAgent: () => read("ELEVENLABS_AGENT_ID"),
   databaseUrl: () => read("DATABASE_URL"),
   auth0Ready: () => Boolean(read("AUTH0_DOMAIN") && read("AUTH0_CLIENT_ID") && read("AUTH0_CLIENT_SECRET") && read("AUTH0_SECRET")),
 };
@@ -25,7 +27,8 @@ export const env = {
 export function health(): Health {
   return {
     gemini: env.geminiKey() !== null,
-    voice: env.elevenLabsKey() !== null,
+    voice: Boolean(env.elevenLabsKey() && env.elevenLabsVoice()),
+    voiceConversation: Boolean(env.elevenLabsKey() && env.elevenLabsAgent()),
     db: env.databaseUrl() !== null,
     auth: env.auth0Ready(),
     preview: false,

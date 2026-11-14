@@ -4,9 +4,12 @@ export { unlockAudio, say, sayText, setMuted, stopSpeaking } from "./voice";
 export { PHRASES, PHRASE_IDS, phraseText, phraseAudience, phraseClipUrl, type PhraseId, type Audience } from "./phrases";
 export type {
   CapturedShot,
+  CoachCaptureResult,
   CoachInstruction,
   CoachPhase,
   CoachSession,
   CoachSessionOptions,
   CoachState,
+  CoachSpeech,
+  CoachSpeechLine,
 } from "./types";
