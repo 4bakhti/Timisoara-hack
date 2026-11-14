@@ -39,6 +39,11 @@ vi.mock("@/coach", () => ({
       simulated: false,
       error: null,
       captureNow: () => options.onCapture(shot),
+      requestCapture: async () => {
+        options.onCapture(shot);
+        return { ok: true as const, outcome: "captured" as const };
+      },
+      cancelPendingCapture: () => undefined,
       restart: () => undefined,
     };
   },

@@ -13,10 +13,15 @@
  * With `demo`, nothing touches the camera, the network or the AI: a drawn scene
  * stands in for the camera, the bundled sample plan for the reading, the scripted
  * coach for tracking, and the sample review for the comparison. Every screen says so.
+ *
+ * Outside the demo, an optional voice conversation can steer the same flow. It is
+ * invisible unless the server reports it configured, and starts only from an
+ * explicit tap after the user is told that microphone audio goes to ElevenLabs.
+ * Spoken commands go through the same functions as the touch controls.
  */
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
-import { unlockAudio, useCoachSession, type CapturedShot } from "@/coach";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { unlockAudio, useCoachSession, type CapturedShot, type CoachSpeech } from "@/coach";
 import { deviceSpeech } from "@/components/deviceSpeech";
 import { FeedbackForm } from "@/components/FeedbackForm";
 import { IdeaCard } from "@/components/IdeaCard";
@@ -24,6 +29,7 @@ import { LangToggle } from "@/components/LangToggle";
 import { RecipePublisher } from "@/components/RecipePublisher";
 import { ScoreRing } from "@/components/ScoreRing";
 import { card, pill, primary, secondary } from "@/components/styles";
+import { VoiceControl } from "@/components/VoiceControl";
 import { t, type StringKey } from "@/i18n/strings";
 import { api } from "@/lib/api";
 import { APP_NAME, APP_TAGLINE } from "@/lib/brand";
@@ -31,6 +37,7 @@ import type { CoachMode, Lang, Recipe, ReviewResponse, ShotIdea, ShotPlan, ShotS
 import { SAMPLE_PLAN_PERSON, sampleReview } from "@/lib/fixtures";
 import { useLang } from "@/state/lang";
 import { grabFrame, requestMotionPermission, scoreStill, shrinkImage } from "@/vision";
+import { useVoiceDirector, type VoiceActions, type VoiceContext, type VoiceDirector, type VoiceDirectorState } from "@/voice";
 
 type Step = "intro" | "camera" | "reading" | "ideas" | "coach" | "result";
 type Facing = "environment" | "user";
@@ -59,7 +66,50 @@ function NotMeasured({ lang }: { lang: Lang }) {
   );
 }
 
-export function ShootFlow({ recipe, onExit, round, demo = false }: { recipe?: Recipe; onExit?: () => void; round?: string; demo?: boolean }) {
+export interface ShootFlowProps {
+  recipe?: Recipe;
+  onExit?: () => void;
+  /** User-testing round label, sent with feedback. */
+  round?: string;
+  demo?: boolean;
+}
+
+/** What the voice conversation lends the flow, and where the flow hands back its action handlers. */
+interface Talk {
+  director: VoiceDirector;
+  state: VoiceDirectorState;
+  speech: CoachSpeech;
+  register: (handlers: VoiceActions) => void;
+}
+
+/** Refreshes the conversation's picture of the screen at least this often while it runs. */
+const CONTEXT_EVERY_MS = 2000;
+
+export function ShootFlow(props: ShootFlowProps) {
+  // The demo makes no network requests, so it never mounts the voice conversation (which asks the server on mount).
+  return props.demo ? <FlowCore {...props} talk={null} /> : <TalkingShootFlow {...props} />;
+}
+
+function TalkingShootFlow(props: ShootFlowProps) {
+  const handlers = useRef<VoiceActions | null>(null);
+  // Stable for the director; each call reaches the flow's current handlers.
+  const actions = useMemo<VoiceActions>(
+    () => ({
+      selectIdea: (ideaId, signal) => handlers.current?.selectIdea(ideaId, signal) ?? { ok: false, reason: "unavailable" },
+      setCoachingPaused: (paused, signal) => handlers.current?.setCoachingPaused(paused, signal) ?? { ok: false, reason: "unavailable" },
+      requestCapture: (signal) => handlers.current?.requestCapture(signal) ?? { ok: false, reason: "unavailable" },
+    }),
+    [],
+  );
+  const { director, state, speech } = useVoiceDirector(actions);
+  const register = useCallback((next: VoiceActions) => {
+    handlers.current = next;
+  }, []);
+  const talk = useMemo(() => ({ director, state, speech, register }), [director, state, speech, register]);
+  return <FlowCore {...props} talk={talk} />;
+}
+
+function FlowCore({ recipe, onExit, round, demo = false, talk }: ShootFlowProps & { talk: Talk | null }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const pictureUrlRef = useRef<string | null>(null);
@@ -89,6 +139,12 @@ export function ShootFlow({ recipe, onExit, round, demo = false }: { recipe?: Re
   const [review, setReview] = useState<ReviewResponse | null>(null);
   const [reviewing, setReviewing] = useState(false);
   const [readingLine, setReadingLine] = useState(0);
+  /** Paused by a spoken command; the touch "Resume" undoes it. */
+  const [paused, setPaused] = useState(false);
+  /** true from the "Start talking" tap until the conversation is ended. */
+  const [talking, setTalking] = useState(false);
+  const talkingRef = useRef(false);
+  const talkAvailable = talk !== null && talk.state.configured === true;
 
   const mirrored = live !== null && facing === "user";
   const coaching = step === "coach" && idea !== null;
@@ -131,9 +187,19 @@ export function ShootFlow({ recipe, onExit, round, demo = false }: { recipe?: Re
     if (!recipe) await compare(captured, chosen, beforeImage, scored, run);
   };
 
+  /** Ends the conversation. After a capture, the director first lets the agent hear the result. */
+  const endTalk = (afterCapture = false) => {
+    if (!talkingRef.current || !talk) return;
+    talkingRef.current = false;
+    setTalking(false);
+    void talk.director.end(afterCapture ? { afterCapture: true } : undefined);
+  };
+
   const handleCapture = (captured: CapturedShot) => {
     // A photo that arrives after the user has left coaching belongs to nothing on screen.
     if (step !== "coach") return;
+    endTalk(true);
+    setPaused(false);
     setShot(captured);
     setCaptures((count) => count + 1);
     setStep("result");
@@ -151,7 +217,9 @@ export function ShootFlow({ recipe, onExit, round, demo = false }: { recipe?: Re
     mirrored,
     voice,
     engine: demo ? "sim" : "auto",
-    speech: demo ? deviceSpeech : undefined,
+    // The conversation's speech object is stable; it is only handed over while the conversation runs.
+    speech: demo ? deviceSpeech : talking && talk ? talk.speech : undefined,
+    paused,
     onCapture: handleCapture,
   });
 
@@ -230,6 +298,7 @@ export function ShootFlow({ recipe, onExit, round, demo = false }: { recipe?: Re
 
   /** Back to the first screen: the camera is released and can be asked for again. */
   const leaveSource = () => {
+    endTalk();
     stopCamera();
     setPicture(null);
     setProblem(null);
@@ -240,7 +309,10 @@ export function ShootFlow({ recipe, onExit, round, demo = false }: { recipe?: Re
     live ? (await grabFrame(live, { maxSide: 1024, mirrored, quality: 0.85 })).dataUrl : shrinkImage(picture ?? "", 1024);
 
   const choose = (chosen: ShotIdea) => {
+    // Stop the previous idea's countdown or capture before anything changes.
+    session.cancelPendingCapture();
     unlockAudio();
+    setPaused(false);
     runRef.current += 1;
     setIdea(chosen);
     setShot(null);
@@ -306,6 +378,105 @@ export function ShootFlow({ recipe, onExit, round, demo = false }: { recipe?: Re
       busyRef.current = false;
     }
   };
+
+  /* ------------------------------------------------- voice conversation */
+
+  const startTalk = () => {
+    if (!talk || talkingRef.current) return;
+    unlockAudio();
+    talkingRef.current = true;
+    setTalking(true);
+    talk.director.setOutputEnabled(voice);
+    void talk.director.start(lang);
+  };
+
+  const cameraReady = live !== null && live.readyState >= 2 && live.videoWidth > 0;
+  const context: Omit<VoiceContext, "updatedAt"> = {
+    lang,
+    phase: step,
+    ideas: (step === "ideas" || step === "coach") && plan && !recipe ? plan.ideas.map(({ id, title }) => ({ id, title })) : [],
+    selectedIdeaId: idea?.id ?? null,
+    // Only facts from a real reading of this scene; sample data says nothing about it.
+    scene: plan && !mock ? plan.scene : null,
+    coachPhase: coaching ? session.phase : null,
+    instruction: coaching ? session.instruction : null,
+    personTracked: coaching && session.personVisible,
+    paused,
+    cameraReady,
+  };
+  const contextKey = JSON.stringify(context);
+
+  /** Spoken commands. Same paths as the touch controls; the abort signal is checked before anything changes. */
+  const handlers: VoiceActions = {
+    selectIdea(ideaId, signal) {
+      if (step !== "ideas" && step !== "coach") return { ok: false, reason: "wrong_phase" };
+      const chosen = recipe ? undefined : plan?.ideas.find((item) => item.id === ideaId);
+      if (!chosen) return { ok: false, reason: plan && !recipe ? "unknown_idea" : "wrong_phase" };
+      session.cancelPendingCapture();
+      if (signal.aborted) return { ok: false, reason: "stale" };
+      choose(chosen);
+      return { ok: true, outcome: "idea_selected" };
+    },
+    setCoachingPaused(pause, signal) {
+      if (!coaching) return { ok: false, reason: "wrong_phase" };
+      session.cancelPendingCapture();
+      if (signal.aborted) return { ok: false, reason: "stale" };
+      setPaused(pause);
+      return { ok: true, outcome: pause ? "paused" : "resumed" };
+    },
+    requestCapture(signal) {
+      if (!coaching) return { ok: false, reason: "wrong_phase" };
+      if (paused) return { ok: false, reason: "paused" };
+      if (signal.aborted) return { ok: false, reason: "stale" };
+      return session.requestCapture(signal);
+    },
+  };
+
+  const director = talk?.director ?? null;
+  const register = talk?.register;
+  useEffect(() => {
+    register?.(handlers);
+  });
+
+  // The output switch governs the conversation's voice as well as the coach's own.
+  useEffect(() => {
+    director?.setOutputEnabled(voice);
+  }, [director, voice]);
+
+  // Tell the conversation what is on screen whenever it changes, and refresh it every two seconds.
+  useEffect(() => {
+    if (!talking || !director) return;
+    const send = () => director.updateContext({ ...context, updatedAt: Date.now() });
+    send();
+    const id = window.setInterval(send, CONTEXT_EVERY_MS);
+    return () => window.clearInterval(id);
+    // `context` is tracked through contextKey: a new object every render, the same content most of the time.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [talking, director, contextKey]);
+
+  // The agent's language is chosen at start: a language change restarts the conversation.
+  const startedLang = useRef(lang);
+  useEffect(() => {
+    if (!director || !talkingRef.current || startedLang.current === lang) {
+      startedLang.current = lang;
+      return;
+    }
+    startedLang.current = lang;
+    void director.end().then(() => {
+      if (talkingRef.current) void director.start(lang);
+    });
+  }, [lang, director]);
+
+  const voiceControl = talkAvailable && talk && (
+    <VoiceControl
+      lang={lang}
+      state={talk.state}
+      talking={talking}
+      onStart={startTalk}
+      onStop={() => endTalk()}
+      onToggleMic={() => talk.director.setMicMuted(!talk.state.micMuted)}
+    />
+  );
 
   const askReview = () => {
     if (!shot || !idea || !before || reviewing || review) return;
@@ -374,7 +545,14 @@ export function ShootFlow({ recipe, onExit, round, demo = false }: { recipe?: Re
         <section className="absolute inset-0 flex flex-col justify-between gap-6 overflow-y-auto bg-neutral-950 p-6 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))]">
           <div className="flex items-center justify-between gap-2">
             {onExit ? (
-              <button type="button" className={pill} onClick={onExit}>
+              <button
+                type="button"
+                className={pill}
+                onClick={() => {
+                  endTalk();
+                  onExit();
+                }}
+              >
                 {t("backToRecipe", lang)}
               </button>
             ) : (
@@ -459,6 +637,7 @@ export function ShootFlow({ recipe, onExit, round, demo = false }: { recipe?: Re
             )}
           </div>
           <div className="grid gap-3">
+            {voiceControl}
             {problemNote}
             {recipe && (
               <div className={overCamera}>
@@ -485,6 +664,7 @@ export function ShootFlow({ recipe, onExit, round, demo = false }: { recipe?: Re
 
       {step === "ideas" && plan && (
         <section className="absolute inset-0 flex flex-col overflow-y-auto bg-gradient-to-t from-black/85 via-black/30 to-transparent pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))]">
+          {voiceControl && <div className="px-4">{voiceControl}</div>}
           <div className="mt-auto">
             <div className="flex items-center justify-between gap-2 px-4 pb-3">
               <h2 className="text-2xl font-semibold">{t("pickShot", lang)}</h2>
@@ -535,6 +715,15 @@ export function ShootFlow({ recipe, onExit, round, demo = false }: { recipe?: Re
           )}
 
           <div className="grid gap-3">
+            {voiceControl}
+            {paused && (
+              <div className="flex items-center justify-between gap-3 rounded-2xl bg-black/75 px-4 py-2 backdrop-blur" role="status">
+                <span className="font-semibold">{t("paused", lang)}</span>
+                <button type="button" className={pill} onClick={() => setPaused(false)}>
+                  {t("resume", lang)}
+                </button>
+              </div>
+            )}
             {demo && <p className="rounded-xl bg-black/70 px-3 py-2 text-center text-sm text-amber-200">{t("demoCoachNote", lang)}</p>}
             <p
               className="rounded-2xl bg-black/60 px-4 py-3 text-center text-2xl font-semibold leading-snug backdrop-blur"
@@ -650,7 +839,14 @@ export function ShootFlow({ recipe, onExit, round, demo = false }: { recipe?: Re
               </Link>
             )}
             {recipe && onExit && (
-              <button type="button" className={secondary} onClick={onExit}>
+              <button
+                type="button"
+                className={secondary}
+                onClick={() => {
+                  endTalk();
+                  onExit();
+                }}
+              >
                 {t("backToRecipe", lang)}
               </button>
             )}
