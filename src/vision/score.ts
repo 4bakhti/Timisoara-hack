@@ -109,7 +109,12 @@ export function computeShotScore(input: ScoreInput): ShotScore {
   const template = getPoseTemplate(idea.subject?.poseTemplateId);
   const person = pose && hasTorso(pose.points) ? pose : null;
 
-  const framing = person ? (matchFraming(person.points, template.points, idea.framing.subjectBox, aspect, mode)?.score ?? 0) : 0;
+  // Without a subject the tracker has nothing to measure framing against: report it as not measured.
+  const framing = !idea.subject
+    ? null
+    : person
+      ? (matchFraming(person.points, template.points, idea.framing.subjectBox, aspect, mode)?.score ?? 0)
+      : 0;
 
   let poseScore: number | null = null;
   if (idea.subject && person) {
@@ -123,8 +128,8 @@ export function computeShotScore(input: ScoreInput): ShotScore {
   const parts = {
     pose: poseScore,
     framing,
-    crop: person ? cropScore(person) : null,
-    light: person && input.image ? lightScore(input.image, person) : null,
+    crop: idea.subject && person ? cropScore(person) : null,
+    light: idea.subject && person && input.image ? lightScore(input.image, person) : null,
     level: input.level,
   };
 
@@ -161,12 +166,14 @@ function loadImage(src: string): Promise<HTMLImageElement> {
  * Scores a photo (data URL, blob URL or address) against an idea. Use it for the
  * "before" picture so it can be compared with the captured shot's score.
  * Level is unknown for a still, so it is left out of both the parts and the total.
+ * Returns null when nothing could be measured (an idea without a person), so the
+ * interface shows "not measured" instead of a misleading 0.
  */
-export async function scoreStill(src: string, idea: ShotIdea, mode: CoachMode = "friend"): Promise<ShotScore> {
+export async function scoreStill(src: string, idea: ShotIdea, mode: CoachMode = "friend"): Promise<ShotScore | null> {
   const image = await loadImage(src);
   const tracker = await getStillTracker();
   const pose = tracker.detect(image);
-  return computeShotScore({
+  const score = computeShotScore({
     pose,
     idea,
     mode,
@@ -174,4 +181,10 @@ export async function scoreStill(src: string, idea: ShotIdea, mode: CoachMode = 
     level: null,
     image,
   });
+  return isMeasured(score) ? score : null;
+}
+
+/** true when at least one part of the score could be measured. */
+export function isMeasured(score: ShotScore): boolean {
+  return [score.pose, score.framing, score.crop, score.light, score.level].some((part) => part !== null);
 }
