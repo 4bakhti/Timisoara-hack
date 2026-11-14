@@ -113,3 +113,12 @@ Existing methods/return types remain intact. New methods distinguish missing con
 - `api.recipes.use(id)`: boolean confirming the explicit start-coaching use write.
 
 Wire these into the interface in the integrator's change. Also wire optional feedback `beforeTotal`/`afterTotal`, optional event/feedback `round`, sample recipe labels, and storage messaging. The coach and feedback form currently generate different session codes; unifying them requires a separately owned coach/UI change. Match-score gain is a heuristic, not evidence of aesthetic improvement. Comments are optional free text: do not ask for names or contact details, and do not expose comment contents in public stats.
+
+## AI pose previews
+
+After the scene is read, each idea card asks `/api/preview` for an AI preview: the same person in the same place, in that idea's pose. Choosing a card with a preview coaches toward the preview's pose and outline.
+
+- It uses `GEMINI_API_KEY` with the image model `gemini-3.1-flash-lite-image` (Nano Banana 2 Lite) by default. Set `GEMINI_IMAGE_MODEL=gemini-nano-banana-2.1` for higher quality.
+- **Image generation needs image quota on the key's Google account.** Free keys answer "429 quota exceeded". Then the server pauses previews for ten minutes, and the cards keep their drawings.
+- Previews are labelled "AI preview, not your photo". The final photo is always a real capture.
+- Check: `/api/health` shows `"preview": true` while previews are available.
