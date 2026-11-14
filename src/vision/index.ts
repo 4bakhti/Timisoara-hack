@@ -9,4 +9,5 @@ export { matchAll, matchFraming, matchPose, type Correction, type FramingMatch, 
 export { bodyAngles3d, poseFeatures, templateToImage, toIsotropic, type LivePoints, type PoseFeatures } from "./geometry";
 export { createPoseTracker, createStillTracker, hasTorso, type StillTrackerOptions, type TrackedPose } from "./tracker";
 export { createFaceTracker, type FaceTracker } from "./face";
+export { fitTargetToFrame, pictureAspect, targetFromPose, targetFromPreview } from "./fromPreview";
 export type { CustomTarget, FaceSignals, Limb, Point3, PoseModelName, SilhouetteMask, WorldPoints } from "./types";

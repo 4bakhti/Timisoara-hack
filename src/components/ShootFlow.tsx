@@ -25,6 +25,7 @@ import { unlockAudio, useCoachSession, type CapturedShot, type CoachSpeech } fro
 import { deviceSpeech } from "@/components/deviceSpeech";
 import { FeedbackForm } from "@/components/FeedbackForm";
 import { IdeaCard } from "@/components/IdeaCard";
+import { usePosePreviews } from "@/components/usePosePreviews";
 import { LangToggle } from "@/components/LangToggle";
 import { RecipePublisher } from "@/components/RecipePublisher";
 import { ScoreRing } from "@/components/ScoreRing";
@@ -36,7 +37,7 @@ import { APP_NAME, APP_TAGLINE } from "@/lib/brand";
 import type { CoachMode, Lang, Recipe, ReviewResponse, ShotIdea, ShotPlan, ShotScore } from "@/lib/contracts";
 import { SAMPLE_PLAN_PERSON, sampleReview } from "@/lib/fixtures";
 import { useLang } from "@/state/lang";
-import { grabFrame, requestMotionPermission, scoreStill, shrinkImage } from "@/vision";
+import { grabFrame, requestMotionPermission, scoreStill, shrinkImage, targetFromPreview, pictureAspect, type CustomTarget } from "@/vision";
 import { useVoiceDirector, type VoiceActions, type VoiceContext, type VoiceDirector, type VoiceDirectorState } from "@/voice";
 
 type Step = "intro" | "camera" | "reading" | "ideas" | "coach" | "result";
@@ -131,6 +132,10 @@ function FlowCore({ recipe, onExit, round, demo = false, talk }: ShootFlowProps 
   const [before, setBefore] = useState<string | null>(null);
   const [plan, setPlan] = useState<ShotPlan | null>(null);
   const [mock, setMock] = useState(false);
+  /** AI pose previews of the ideas, and the coaching target taken from the chosen one. */
+  const previews = usePosePreviews();
+  const [target, setTarget] = useState<CustomTarget | undefined>(undefined);
+  const targetRef = useRef<CustomTarget | undefined>(undefined);
   const [idea, setIdea] = useState<ShotIdea | null>(null);
   const [shot, setShot] = useState<CapturedShot | null>(null);
   const [captures, setCaptures] = useState(0);
@@ -175,7 +180,8 @@ function FlowCore({ recipe, onExit, round, demo = false, talk }: ShootFlowProps 
     }
     let scored: ShotScore | null = null;
     try {
-      scored = await scoreStill(beforeImage, chosen, mode);
+      const aim = targetRef.current;
+      scored = await scoreStill(beforeImage, chosen, mode, aim ? { points: aim.points, box: aim.box } : undefined);
     } catch {
       scored = null;
     }
@@ -217,6 +223,7 @@ function FlowCore({ recipe, onExit, round, demo = false, talk }: ShootFlowProps 
     mirrored,
     voice,
     engine: demo ? "sim" : "auto",
+    target,
     // The conversation's speech object is stable; it is only handed over while the conversation runs.
     speech: demo ? deviceSpeech : talking && talk ? talk.speech : undefined,
     paused,
@@ -314,6 +321,18 @@ function FlowCore({ recipe, onExit, round, demo = false, talk }: ShootFlowProps 
     unlockAudio();
     setPaused(false);
     runRef.current += 1;
+    setTarget(undefined);
+    targetRef.current = undefined;
+    const preview = previews.previews[chosen.id];
+    if (preview?.status === "ready") {
+      const run = runRef.current;
+      const frameAspect = live?.videoWidth ? Promise.resolve(live.videoWidth / live.videoHeight) : before ? pictureAspect(before) : Promise.resolve(null);
+      void frameAspect.then((aspect) => targetFromPreview(preview.image, aspect)).then((found) => {
+        if (!found || runRef.current !== run) return;
+        targetRef.current = found;
+        setTarget(found);
+      });
+    }
     setIdea(chosen);
     setShot(null);
     setBeforeScore(null);
@@ -341,6 +360,7 @@ function FlowCore({ recipe, onExit, round, demo = false, talk }: ShootFlowProps 
         setBefore(await shrinkImage(DEMO_SCENE, 1024));
         setPlan(SAMPLE_PLAN_PERSON);
         setMock(true);
+        previews.clear();
         setStep("ideas");
         return;
       }
@@ -357,6 +377,9 @@ function FlowCore({ recipe, onExit, round, demo = false, talk }: ShootFlowProps 
       const answer = await api.analyze({ image, lang, mode });
       setPlan(answer.plan);
       setMock(Boolean(answer.mock));
+      // Previews only for a real reading of this scene, never for sample ideas.
+      if (answer.mock) previews.clear();
+      else void previews.request(image, answer.plan.ideas, lang);
       setStep("ideas");
     } finally {
       busyRef.current = false;
@@ -687,9 +710,10 @@ function FlowCore({ recipe, onExit, round, demo = false, talk }: ShootFlowProps 
             )}
             <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2">
               {plan.ideas.map((item) => (
-                <IdeaCard key={item.id} idea={item} lang={lang} onUse={() => choose(item)} />
+                <IdeaCard key={item.id} idea={item} lang={lang} onUse={() => choose(item)} preview={previews.previews[item.id]} />
               ))}
             </div>
+            {Object.keys(previews.previews).length > 0 && <p className="px-4 pt-1 text-xs leading-snug text-neutral-300">{t("previewsNote", lang)}</p>}
           </div>
         </section>
       )}
