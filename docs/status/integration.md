@@ -16,6 +16,23 @@ Updated: Sat 14 Nov, 14:45. `main` at the commit that adds this file.
 
 **Do not merge `codex-2/storage-recipes` again.** Its last commit (`8969107`) was signed with a personal e-mail address. Its changes are already in `main`, re-committed unchanged as `5204a11` under the GitHub no-reply address. Merging the branch would add nothing but that address to the history.
 
+## Vision upgrade (Sat 14 Nov afternoon)
+
+| Part | State |
+|---|---|
+| Shared hookups (`src/vision/types.ts`, wiring in `poseEngine`, `/lab/live` readout) | Merged `bdc5826`, `17f08cd` |
+| **A — tracker and drawing** (`vision/a-tracker-outline`) | **Merged `03f5012`** |
+| B — AI pose previews (`vision/b-ai-previews`) | In progress |
+| C — face and 3D coaching (`vision/c-face-3d`) | In progress |
+
+What A changed, for B and C:
+- `createStillTracker({ withMask: true })` now returns `pose.mask` (person outline) and `pose.world` (3D points). B: use it for preview targets.
+- Live tracking returns `pose.world` every frame and `pose.mask` every third frame. C: `matchAll` and `bodyAngles3d` now receive real 3D points.
+- Masks come from MediaPipe's selfie segmenter on the CPU. Masks read back from the GPU came back empty in testing.
+- Phones start on the lite pose model and upgrade to full when detection stays under 18 ms a frame (back to lite above 40 ms). `/lab/live` shows which one runs.
+- Drawing: the target is a body shape with a dashed outline (the preview's real outline when `target.silhouette` is set); the live person gets a glowing outline; the corrected limb turns red; everything turns green only while the coach holds or counts down.
+- Checked in a desktop browser on a single picture (outline, figure, colours). **Not yet checked on a real phone or live camera.**
+
 ## Checks
 
 `npm run check` passes on `main`: types, lint, 179 tests (7 PostgreSQL tests skip without `TEST_DATABASE_URL`), and the default production build.
