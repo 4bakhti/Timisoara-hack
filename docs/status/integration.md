@@ -1,34 +1,36 @@
 # Integration: status
 
-Updated: Sat 14 Nov, 12:40
+Updated: Sat 14 Nov, 14:45. `main` at the commit that adds this file.
 
-## Merged into `main`
+## Merged into `main`, in order
 
-1. `codex-2/backend-extras`: ElevenLabs speech route, optional voice conversation ("voice director"), coach speech hooks. Merge `2cc603a`.
-2. Gemini fix found by live testing (`fe57dd2`, `1331a82`, details below).
-3. `claude-2/interface-extras` (PR #2): honest feedback form, recipes with QR codes, `/recipes`, `/r/[id]`, `/stats`, home page, shooting-flow fixes. Merge `e8d8d3e`.
+| Step | What | Commit |
+|---|---|---|
+| 1 | `codex-2/backend-extras`: ElevenLabs speech route, voice director, coach speech hooks | `2cc603a` |
+| 2 | Gemini fix found by live testing (fast model + overload fallback; honest review) | `fe57dd2`, `1331a82` |
+| 3 | `claude-2/interface-extras` (PR #2): feedback form, recipes with QR, `/recipes`, `/r/[id]`, `/stats`, home page, shoot fixes | `e8d8d3e` |
+| 4 | `codex-2/storage-recipes`: memory or PostgreSQL storage, migrations, `/api/events`, `/api/feedback`, `/api/stats`, recipes (create, list, get, use, hide) | `088f8f8` + `5204a11` |
+| 5 | `claude-2/interface-part2`, parts 1–3: judges' QR on desktop, app icon and manifest, `?round=` label, `/demo`, voice conversation in `/shoot` | `3c1a7ae` |
+| 6 | Integrator fixes: Romanian sample ideas, "not measured" scores for ideas without a person, round label in the coach's usage numbers | `e13f452`, `8e73aca`, `7b8753b` |
+| 7 | Vultr deploy kit (`deploy/vultr/`, `docs/DEPLOY-VULTR.md`), README for judges, Living Lab log template | `4a312bf`, `10cf625`, this commit |
 
-`npm run check` passed after each step: types, lint, 125 tests, production build.
+**Do not merge `codex-2/storage-recipes` again.** Its last commit (`8969107`) was signed with a personal e-mail address. Its changes are already in `main`, re-committed unchanged as `5204a11` under the GitHub no-reply address. Merging the branch would add nothing but that address to the history.
 
-## Verified live, with a real Gemini key, on localhost
+## Checks
 
-| Call | Result |
+`npm run check` passes on `main`: types, lint, 179 tests (7 PostgreSQL tests skip without `TEST_DATABASE_URL`), and the default production build.
+
+Verified live on localhost:
+
+| What | Result |
 |---|---|
-| Read a portrait (English) | Real plan in 4–7 s; ideas name things in the photo (ornate table, book, backdrop) |
-| Read a coffee cup (Romanian) | Real plan in 4 s, in Romanian, no pose for an object |
-| Review | Real; with two identical photos it now says they look the same |
-| Guidance (no person) | Real, 1–2 s |
-| Whole `/shoot` flow with a picture | Real ideas, coaching, capture, result, recipe button and feedback form shown |
+| Gemini (real key) | Scene reading 4–7 s with ideas specific to the photo, in English and Romanian; review honest with identical photos; guidance 1–2 s |
+| Storage routes (memory) | Events are idempotent (two submissions, one session); feedback confirmed and malformed input rejected; stats show only measured values (median 1.5 s, gain +22, rating 4, zero votes); recipe created public with a rounded location, loaded by id, listed; one use counted and a repeat refused; unknown id answers 404; hide answers 501 without a configured token |
+| Production server | Home page shows the judges' QR on a wide screen; `/shoot` hides the voice toggle while no agent is configured; `/demo` reaches a labelled result with recipes and feedback disabled |
 
-Gemini fix: the planning model `gemini-4-hydrogen` timed out (19 s even with low thinking). Measured on a 960 px photo: `gemini-3.5-flash-lite` 3–5 s, `gemini-3.6-flash` 16 s, `gemini-3.8-flash` over 40 s. The default is now `gemini-3.5-flash-lite`. It often returns HTTP 503 ("high demand"), so a transient error moves straight to `gemini-3.1-flash-lite` within the same 14 s budget. The reviewer prompt now says the scores are not proof of a better photo.
+Not verified: a real phone, a deployed HTTPS address, ElevenLabs (no keys), a real PostgreSQL database, and the Vultr scripts on a real server (syntax and generated config checked only).
 
-## Not working yet
+## Next
 
-- **No server routes for feedback, recipes, stats or usage events.** The interface is ready for them and honestly shows "not saved" / "not available": `POST /api/feedback`, `GET/POST /api/recipes`, `GET /api/recipes/[id]`, `GET /api/stats`, `POST /api/events`. See the requests in `docs/status/interface.md`.
-- ElevenLabs: no key, voice id or agent yet, so `/api/speak` and `/api/voice/session` answer 501 and the phone's own voice is used. The voice conversation is not wired into the shooting screen yet.
-- Not tested on a real phone or a deployed HTTPS address.
-- Sample plans are English only.
-
-## Not merged
-
-- `quality/release-readiness` (test plans and two quality tests). Its commit is signed with a personal e-mail address instead of the GitHub no-reply address, so it was left for the team to decide.
+- **Claude-2, part 5 is unblocked**: Codex-2's routes are on `main`. Merge `origin/main` into `claude-2/interface-part2`, then wire `recipes.load` / `listResult` / `statsResult`, `recipes.use`, `beforeTotal` / `afterTotal` and the storage label, and rerun the recipe flow against the real routes.
+- The team: deploy (Vercel or Vultr), add keys, test on phones, run user-testing rounds.
