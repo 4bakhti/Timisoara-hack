@@ -1,36 +1,20 @@
-# Server: status
+# Server status
 
-Updated: Sat 14 Nov, 02:45
+Updated 14 November 2026 · `codex-2/backend-extras`
 
-A first version of the core routes was written by the vision workstream so the product works end to end. Whoever picks up the server workstream owns these files from here and continues with the list under "Next".
+## Voice bridge for the interface
 
-## Done
-- `src/server/env.ts`: all configuration, every value optional. `GET /api/health`.
-- `src/server/gemini.ts`: one helper for Gemini calls that asks for JSON matching a zod schema, validates the answer, retries once with the validation errors (the retry describes the schema in words in case the API rejected the schema itself), and returns null on failure.
-- `src/server/prompts.ts`: the instructions for planning, review and guidance.
-- `POST /api/analyze`: photo in, `ShotPlan` out (`gemini-4-hydrogen`), tidied by `src/server/plan.ts` (boxes kept in frame, unknown poses replaced, unique ids).
-- `POST /api/review`: before and after in, improvements and a lesson out.
-- `POST /api/guide`: quick framing check (`gemini-3.5-flash-lite`).
-- Body size limit, per-address rate limit, clean error codes, no logging of images.
-- Without `GEMINI_API_KEY` every route answers with sample data flagged `mock: true`. Checked locally.
-- `docs/SETUP.md`: deployment and keys.
+Import `VoiceActions`, `VoiceContext`, `VoiceDirector`, `VoiceDirectorState` and `VoiceLine` from `@/voice`. This commit publishes the types. The upcoming runtime commit adds `useVoiceDirector(actions)` to the same entry point. It returns `{ director, state, speech }`, where `speech` is a stable adapter to pass as `useCoachSession({ …, speech })`. Leave `voice` tied to the existing output switch. The director owns correction playback, agent output and countdown audio together. Avoid a second speech call when rendering the instruction.
 
-## Not checked
-- **No real Gemini call has been made**: there is no key yet. The request shape follows the installed SDK's types and README. First thing to do with a key: open `/shoot`, read a scene, and look at the server log for lines starting `[gemini]`.
+- Use `director.start(lang)` in the explicit start gesture after explaining that the mic sends audio to ElevenLabs. Keep the camera on its existing video element. Use `director.end()` when the user leaves the shooting flow or reaches the result. The runtime cleans up on unmount and document exit as well. A language change takes effect in the next conversation.
+- Send `director.updateContext(snapshot)` when the flow, ideas, selected idea, pause state, camera readiness, coach instruction or person tracking changes. Refresh `updatedAt: Date.now()` about every two seconds while the flow is active so spoken actions can reject stale UI state. The runtime excludes timestamps from change detection, so the refresh does not send extra provider events. Pass `scene: null` for sample suggestions, and pass only the offered idea IDs and titles. Set `cameraReady` only when a live video frame is available. No images or tracker points go to the voice agent.
+- `selectIdea(ideaId, signal)` applies an offered idea using the same UI path as tapping its card. `setCoachingPaused(paused, signal)` updates actual coach state. Before switching the idea or pausing, call the upcoming `session.cancelPendingCapture()` synchronously so any in-progress countdown stops before React commits the new options. Resume via the existing `paused` option. Return the structured result after accepting the state change. Recheck `signal.aborted` and the current idea and phase before a deferred action commits.
+- `requestCapture(signal)` calls the upcoming `session.requestCapture(signal)`. The voice request uses the existing manual shutter, which takes a photo immediately. An automatic countdown already running remains in charge. Return `captured` only after the engine delivers the shot through `onCapture`. Use `session.captureNow()` for the existing touch shutter.
+- The runtime implements `repeat_instruction()` directly with the latest correction, checks IDs and phase for all four tools, and waits for callback results. The connection status and configuration are separate. User and agent transcript lines are optional and ephemeral.
 
-## Next
-1. `POST /api/speak` (ElevenLabs) and the script that pre-generates `public/voice/<lang>/<id>.mp3` from `src/coach/phrases.ts`.
-2. `POST /api/events`, `POST /api/feedback`, `POST /api/pairs`, `GET/POST /api/votes`, `GET /api/stats` with an in-memory store, then PostgreSQL (Tiger Data).
-3. Recipes routes. Sign-in with Auth0.
-4. `POST /api/preview` (AI sketch), light advice, Vultr deployment files.
+Integrate the bridge and server runtime before merging the interface. The runtime and the interface mounting are separate commits/PRs.
 
-## Needs from the team
-- `GEMINI_API_KEY` in Vercel and in `.env.local` (see `docs/SETUP.md`).
-- Later: ElevenLabs key and voice id, a database address, an Auth0 application.
+## Verification
 
-## Requests to other workstreams
-- None.
-
-## Notes for other workstreams
-- The interface already calls these through `src/lib/api.ts`, which falls back to sample data on any failure.
-- `/api/events` and `/api/feedback` do not exist yet; the client ignores the 404.
+- The current Gemini analyze, guide and review routes validate provider output and flag sample responses. The default Gemini model IDs are listed in the [Gemini model catalog](https://ai.google.dev/gemini-api/docs/models).
+- There is no Gemini or ElevenLabs key and no ElevenLabs agent ID configured in this clone. Live scene analysis, speech generation and conversation still need credentials. The existing sample flow can remain usable while the voice integration is developed.
