@@ -8,6 +8,7 @@ it("does not resume device speech when a pending voice request fails after mutin
   vi.stubGlobal("window", {
     speechSynthesis: { speak, cancel: vi.fn() },
     setTimeout: vi.fn(),
+    clearTimeout: vi.fn(),
   });
   vi.stubGlobal("SpeechSynthesisUtterance", class { constructor(public text: string) {} });
   let finishRequest!: (value: Response) => void;

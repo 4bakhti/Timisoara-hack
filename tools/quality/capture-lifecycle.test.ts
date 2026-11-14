@@ -24,7 +24,8 @@ beforeEach(() => {
   vi.stubGlobal("HTMLVideoElement", class Video {});
   vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
   vi.stubGlobal("cancelAnimationFrame", vi.fn());
-  vi.stubGlobal("window", { setTimeout, clearTimeout });
+  // The engines read the page address for the optional ?round= label.
+  vi.stubGlobal("window", { setTimeout, clearTimeout, location: { href: "http://localhost/shoot" } });
 });
 afterEach(() => vi.unstubAllGlobals());
 

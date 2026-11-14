@@ -7,6 +7,7 @@ export default defineConfig({
   },
   test: {
     environment: "node",
-    include: ["src/**/*.test.{ts,tsx}"],
+    // tools/quality holds the quality review's lifecycle regression checks.
+    include: ["src/**/*.test.{ts,tsx}", "tools/quality/*.test.ts"],
   },
 });
