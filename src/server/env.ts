@@ -27,6 +27,7 @@ export const env = {
   elevenLabsRomanianVoice: () => read("ELEVENLABS_VOICE_ID_RO"),
   elevenLabsAgent: () => read("ELEVENLABS_AGENT_ID"),
   databaseUrl: () => read("DATABASE_URL"),
+  recipesAdminToken: () => read("RECIPES_ADMIN_TOKEN"),
   auth0Ready: () => Boolean(read("AUTH0_DOMAIN") && read("AUTH0_CLIENT_ID") && read("AUTH0_CLIENT_SECRET") && read("AUTH0_SECRET")),
 };
 
@@ -36,6 +37,7 @@ export function health(): Health {
     voice: Boolean(env.elevenLabsKey() && env.elevenLabsVoice()),
     voiceConversation: Boolean(env.elevenLabsKey() && env.elevenLabsAgent()),
     db: env.databaseUrl() !== null,
+    storage: env.databaseUrl() !== null ? "database" : "memory",
     auth: env.auth0Ready(),
     preview: false,
     stamp: false,

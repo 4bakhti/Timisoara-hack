@@ -1,3 +1,49 @@
+# Server Part 2: storage, feedback, stats and recipes
+
+Updated: 14 November 2026. Branch: `codex-2/storage-recipes`, continuing the original `b0cbd66` and `b3350f7` commits from main `27fbd2c`. This is a backend handoff; the new client helpers are not yet wired into screens. No deployment or merge performed.
+
+## Implemented
+
+- One process-wide store, selected at startup: bounded demo memory when `DATABASE_URL` is absent, PostgreSQL otherwise. Configured database errors return `503 storage_unavailable`; no silent fallback. SQL is parameterized; pool max 3; the connection URL's TLS settings are preserved.
+- Plain SQL migrations and `npm run db:migrate`, with transaction/advisory lock and an applied-file ledger. Optional migration 0002 converts events only with an already installed/supported TimescaleDB extension; otherwise the regular table remains intact.
+- `POST /api/events`: max 64 KiB / 600 events, validated metadata/samples, one session and sample set per session ID even on retries; threshold imported from `READY_SCORE`.
+- `POST /api/feedback`: confirmed writes/upserts, 1–5 rating, cleaned optional comment, optional before/after totals and round. Response includes storage mode.
+- `GET /api/stats?round=`: actual stored counts, median threshold time in seconds, measured score gains and ratings, null for missing measurements, zero blind votes, storage mode and no-store responses.
+- Guest-public recipes: create/list/detail, validated and cleaned title/place, rounded optional coordinates, sample flag, 16-character cryptographic base62 IDs and at most 50 public results. No photos are stored. GET does not count a use.
+- Explicit `POST /api/recipes/[id]/use`: per-address/recipe ten-minute process-local limit. `POST /api/recipes/[id]/hide`: server-only admin token with constant-time hash comparison; hidden/draft recipes are excluded from public reads.
+- Additive `api.recipes.use/load/listResult` and `api.statsResult(round?)`, preserving existing client methods and return types. `Health.storage` is optional; `db` continues to mean configuration, not successful connectivity.
+- Body limits, route-level rate limits, clean validation errors and generic storage failures. No request bodies or credentials are logged. Addresses stay only in limiter memory.
+
+## Verification
+
+- Typecheck and lint pass. Unit/interaction tests: 152 pass, 7 PostgreSQL cases skip without `TEST_DATABASE_URL`.
+- `next build --webpack` passes and includes all new dynamic routes; it emits the existing MediaPipe dynamic-import warning. The required `npm run check` passed typecheck/lint/tests but its default Turbopack build failed on a worker-port permission error on both Node 26 and the documented Node 22.22.2, including the elevated retry. Webpack production output was built and smoke-tested successfully; the integrator must rerun the default build in its environment before merge. No build script was changed to conceal the failure.
+- Real production localhost HTTP smoke with synthetic data and **memory storage** passed: event retry leaves one session; confirmed feedback; round stats (one-second median, measured score gain); recipe publish/list/load; GET leaves uses zero; explicit use increments once and repeated use returns 429; invalid admin returns 403; hide returns 200 then detail 404/list excludes it. Existing `/shoot`, `/recipes`, `/r/[id]` and `/stats` HTML requests returned 200. This was HTTP verification, not an interactive browser test.
+- Mock tests cover validation, 201 schema, 400/404/429/503, failure across each storage route, token moderation, missing-vs-unavailable client results, memory eviction/copies, idempotency and metric null rules.
+- No real database was supplied or accessed. PostgreSQL persistence, migrations and TimescaleDB conversion are **unverified against a live database**. Opt-in tests use only an explicitly supplied `TEST_DATABASE_URL`, in a random schema, never `DATABASE_URL`.
+- No Gemini/ElevenLabs calls were made for Part 2. Those provider paths/prompts were preserved.
+
+## Integrator wiring still needed (outside backend ownership)
+
+1. Replace ambiguous recipe reads with `api.recipes.load` / `listResult`; use `api.statsResult(round?)` for empty versus unavailable.
+2. Call `api.recipes.use(id)` only when “Start coaching this shot” is accepted. A recipe GET never increments uses.
+3. Send optional `beforeTotal` and `afterTotal` in feedback when both are actually measured under comparable conditions. Do not treat a heuristic match score as photo-quality proof.
+4. Send the testing `round` in feedback and usage events; expose the round query to the results page as appropriate.
+5. Use the optional recipe `sample` flag for publication and labels. The current publisher still refuses sample ideas until the interface changes.
+6. Show temporary storage from a successful health/stats/write response. A failed health request must not be mistaken for confirmed temporary storage. Health reports configuration, not a DB probe.
+7. Coach events and the feedback form currently generate different session IDs; unify them in the owning coach/UI lane if joins are needed. Backend aggregation does not falsely join unrelated IDs.
+8. Rerun the actual publish/link/QR/recreate flow in a browser against these routes, then on physical phones. A 200 HTML response is not evidence that the component flow was exercised.
+
+## Configuration and operations
+
+Set `DATABASE_URL` only for the approved project DB, apply migrations manually, then start/redeploy. Set `RECIPES_ADMIN_TOKEN` on the server only. `TEST_DATABASE_URL` opts into disposable-schema tests. Restart after changing store settings. The memory fallback loses records on restart and is separate per Vercel instance; oldest entries are evicted, and rate limits are likewise local per instance. See `docs/SETUP.md` for smoke commands.
+
+The optional Timescale migration is recorded even when skipped; installing the extension later requires an explicit operator rerun. No extension installation or unrelated database migration is performed automatically.
+
+---
+
+## Historical voice handoff (already merged before Part 2)
+
 # Server status
 
 Updated 14 November 2026 · `codex-2/backend-extras`
