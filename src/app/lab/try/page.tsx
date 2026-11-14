@@ -139,6 +139,10 @@ export default function LabTryPage() {
           <dd data-testid="person">{String(session.personVisible)}</dd>
           <dt className="opacity-60">fps</dt>
           <dd>{session.fps}</dd>
+          <dt className="opacity-60">model · outline</dt>
+          <dd data-testid="debug">
+            {session.debug?.model ?? "–"} · {session.debug?.silhouette ? `on (${session.debug?.outlineCoverage ?? "?"}% of frame)` : "off"}
+          </dd>
           <dt className="opacity-60">error</dt>
           <dd data-testid="error">{session.error ?? "—"}</dd>
           <dt className="opacity-60">captured</dt>
