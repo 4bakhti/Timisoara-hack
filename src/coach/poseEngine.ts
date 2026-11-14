@@ -41,7 +41,7 @@ export function createPoseEngine(cfg: EngineConfig): Engine {
   // A target taken from an AI preview replaces the template and the planner's box.
   const template = cfg.target ? { points: cfg.target.points } : getPoseTemplate(cfg.idea.subject?.poseTemplateId);
   const box = cfg.target?.box ?? cfg.idea.framing.subjectBox;
-  const brain = new CoachBrain({ mode: cfg.mode, expectPose: Boolean(cfg.idea.subject) });
+  const brain = new CoachBrain({ mode: cfg.mode, expectPose: Boolean(cfg.idea.subject), style: cfg.idea.style });
   const recorder = createRecorder(cfg);
   const isVideo = cfg.source instanceof HTMLVideoElement;
 

@@ -13,7 +13,7 @@
  *  - When everything matches for a moment: "hold", 3, 2, 1, capture.
  *    A clear drop during the countdown cancels it.
  */
-import type { CoachMode } from "@/lib/contracts";
+import type { CoachMode, ShotStyle } from "@/lib/contracts";
 import type { Correction, FramingMatch, PoseMatch } from "@/vision/match";
 import type { FaceSignals } from "@/vision/types";
 import { phraseAudience, type PhraseId } from "./phrases";
@@ -50,6 +50,8 @@ export interface BrainOptions {
   mode: CoachMode;
   /** false for ideas without a pose: only framing and level are judged. */
   expectPose: boolean;
+  /** The idea's style. TO USE (Person C): e.g. ask for eye contact in portraits, not in candid shots. */
+  style?: ShotStyle;
 }
 
 export const TIMING = {
