@@ -1,14 +1,25 @@
 /**
  * Draws the coaching guides on a canvas laid over the camera view:
- * the target box, the pose "ghost" and the live skeleton.
+ *
+ *  - the target: a soft body shape with a dashed outline. It is the real outline
+ *    from an AI preview when there is one, otherwise a volumetric figure built
+ *    from the pose template;
+ *  - the live person: their traced outline with a soft glow, sky blue while
+ *    adjusting and green once the coach says the shot matches;
+ *  - the live skeleton: the body part being corrected in red, everything green
+ *    once it matches;
+ *  - the target box corners and, in friend mode, a level line.
  *
  * The canvas must cover the same rectangle as the <video>, which is assumed to
  * use `object-fit: cover`. If the video is mirrored with CSS (front camera),
  * mirror the canvas the same way; everything here is drawn in unmirrored image
  * coordinates. No text is drawn, so mirroring is safe.
+ *
+ * Masks, outlines and glows are built once per mask and cached, so a frame only
+ * pastes ready-made images and strokes one outline.
  */
 import type { Box, Point2, PosePointName, PosePoints } from "@/lib/contracts";
-import { headRadiusFor } from "./poses/build";
+import { figureMask, maskContour, type Polyline } from "./silhouette";
 import type { Limb, SilhouetteMask } from "./types";
 
 export const BONES: ReadonlyArray<readonly [PosePointName, PosePointName]> = [
@@ -25,6 +36,20 @@ export const BONES: ReadonlyArray<readonly [PosePointName, PosePointName]> = [
   ["rHip", "rKnee"],
   ["rKnee", "rAnkle"],
 ];
+
+/** Which body part each bone belongs to, for colouring. */
+export function boneLimb(a: PosePointName, b: PosePointName): Limb {
+  const names = [a, b];
+  const arm = names.every((n) => /Shoulder|Elbow|Wrist/.test(n)) && !names.every((n) => /Shoulder/.test(n));
+  const leg = names.every((n) => /Hip|Knee|Ankle/.test(n)) && !names.every((n) => /Hip/.test(n));
+  const left = names.every((n) => n.startsWith("l"));
+  const right = names.every((n) => n.startsWith("r"));
+  if (arm && left) return "leftArm";
+  if (arm && right) return "rightArm";
+  if (leg && left) return "leftLeg";
+  if (leg && right) return "rightLeg";
+  return "torso";
+}
 
 /** Maps normalised image coordinates (0–1) to canvas CSS pixels. */
 export interface ViewMap {
@@ -71,20 +96,25 @@ export interface GuideFrame {
   map: ViewMap;
   /** Where the subject should be, in normalised image coordinates. */
   targetBox?: Box;
-  /** Pose template to draw inside the target box. */
+  /** Pose template to draw inside the target box (as a body shape). */
   ghost?: PosePoints;
   /** Live body points in normalised image coordinates. Missing points are skipped. */
   live?: Partial<Record<PosePointName, Point2>>;
-  /** 0–100. The ghost turns from white to green as this rises. */
+  /** 0–100. Guides turn from white to green as this rises. */
   score?: number;
   /** Phone roll error in degrees; draws a level line when it is a number. */
   levelErrorDeg?: number | null;
-  /** The live person's outline. TO BUILD (Person A): a soft glow, green when the score is high. */
+  /** The live person's mask, drawn as a glowing outline. */
   silhouette?: SilhouetteMask;
-  /** The target outline from an AI preview, in image coordinates. TO BUILD (Person A): dashed. */
+  /** The target outline from an AI preview, in image coordinates. Replaces the template figure. */
   targetSilhouette?: SilhouetteMask;
-  /** Body parts the coach is asking about. TO BUILD (Person A): draw them in a warning colour. */
+  /** Body parts the coach is asking about, drawn in a warning colour. */
   highlight?: Limb[];
+  /**
+   * true while the coach holds or counts down: everything turns fully green.
+   * When absent, a score at or above the match threshold counts as matched.
+   */
+  matched?: boolean;
 }
 
 /** Keeps the canvas bitmap in step with its CSS size. Returns the CSS size. */
@@ -103,53 +133,182 @@ export function syncCanvas(canvas: HTMLCanvasElement): { width: number; height: 
   return { width, height };
 }
 
+/* ---------------------------------------------------------------- colours */
+
+/** A score at or above this is a match: everything turns green. */
+const MATCH_SCORE = 84;
+const GREEN = "rgba(74, 222, 128, 0.98)";
+const RED = "rgba(248, 113, 113, 0.98)";
+const WHITE = "rgba(255, 255, 255, 0.92)";
+
 const mix = (a: number, b: number, t: number) => Math.round(a + (b - a) * t);
 
-function ghostColour(score: number, alpha: number): string {
-  const t = Math.min(Math.max((score - 40) / 50, 0), 1);
+/**
+ * How green the guides are: they warm up with the score, but only turn fully
+ * green when the coach confirms the match, so that moment stands out.
+ */
+function greenness(score: number, matched: boolean): number {
+  if (matched) return 1;
+  return Math.min(0.55, Math.max(0, (score - 40) / 50));
+}
+
+/** White → green: the target. */
+function guideColour(t: number, alpha: number): string {
   return `rgba(${mix(255, 74, t)}, ${mix(255, 222, t)}, ${mix(255, 128, t)}, ${alpha})`;
 }
+
+/** Sky blue → green: the live person, visible on light and dark scenes. */
+function liveColour(t: number, alpha: number): string {
+  return `rgba(${mix(125, 74, t)}, ${mix(211, 222, t)}, ${mix(252, 128, t)}, ${alpha})`;
+}
+
+/* ------------------------------------------------------------------ caches */
+
+function newCanvas(w: number, h: number): HTMLCanvasElement {
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  return canvas;
+}
+
+const maskCanvases = new WeakMap<SilhouetteMask, Record<"white" | "green", HTMLCanvasElement>>();
+
+/** The mask as solid-colour canvases (alpha from the mask), for fills. */
+function maskFills(mask: SilhouetteMask): Record<"white" | "green", HTMLCanvasElement> {
+  let cached = maskCanvases.get(mask);
+  if (!cached) {
+    const make = (r: number, g: number, b: number) => {
+      const canvas = newCanvas(mask.width, mask.height);
+      const ctx = canvas.getContext("2d");
+      if (ctx) {
+        const image = ctx.createImageData(mask.width, mask.height);
+        for (let i = 0; i < mask.alpha.length; i++) {
+          image.data[i * 4] = r;
+          image.data[i * 4 + 1] = g;
+          image.data[i * 4 + 2] = b;
+          image.data[i * 4 + 3] = mask.alpha[i];
+        }
+        ctx.putImageData(image, 0, 0);
+      }
+      return canvas;
+    };
+    cached = { white: make(255, 255, 255), green: make(74, 222, 128) };
+    maskCanvases.set(mask, cached);
+  }
+  return cached;
+}
+
+const contours = new WeakMap<SilhouetteMask, Polyline[]>();
+
+function contourOf(mask: SilhouetteMask): Polyline[] {
+  let lines = contours.get(mask);
+  if (!lines) {
+    lines = maskContour(mask);
+    contours.set(mask, lines);
+  }
+  return lines;
+}
+
+const figures = new WeakMap<PosePoints, Map<string, SilhouetteMask>>();
+
+/** The volumetric figure for a template in a box, rasterised once per box and image shape. */
+function figureFor(points: PosePoints, box: Box, aspect: number): SilhouetteMask {
+  let byBox = figures.get(points);
+  if (!byBox) {
+    byBox = new Map();
+    figures.set(points, byBox);
+  }
+  const key = [box.x, box.y, box.w, box.h, aspect].map((n) => n.toFixed(3)).join(",");
+  let mask = byBox.get(key);
+  if (!mask) {
+    mask = figureMask(points, box, aspect);
+    if (byBox.size > 8) byBox.clear();
+    byBox.set(key, mask);
+  }
+  return mask;
+}
+
+/* ----------------------------------------------------------------- drawing */
 
 export function drawGuides(ctx: CanvasRenderingContext2D, frame: GuideFrame): void {
   const { map } = frame;
   ctx.clearRect(0, 0, map.viewW, map.viewH);
   const score = frame.score ?? 0;
+  const matched = frame.matched ?? score >= MATCH_SCORE;
+  const t = greenness(score, matched);
+  const aspect = map.imgW / Math.max(1, map.imgH);
 
-  if (frame.targetBox) drawTargetBox(ctx, frame.targetBox, map, score);
-
-  if (frame.ghost && frame.targetBox) {
-    const pts = placeTemplate(frame.ghost, frame.targetBox, map);
-    const figureHeight = frame.targetBox.h * map.imgH * map.scale;
-    drawFigure(ctx, pts, {
-      width: Math.max(4, figureHeight * 0.016),
-      colour: ghostColour(score, 0.8),
-      headRadius: headRadiusFor(frame.ghost) * figureHeight,
-      glow: true,
-    });
-  }
-
-  if (frame.live) {
-    const pts: Partial<Record<PosePointName, Point2>> = {};
-    for (const name of Object.keys(frame.live) as PosePointName[]) {
-      const p = frame.live[name];
-      if (p) pts[name] = [map.x(p[0]), map.y(p[1])];
-    }
-    drawFigure(ctx, pts, { width: 2.5, colour: "rgba(120, 220, 255, 0.95)", dots: true });
-  }
-
+  const target =
+    frame.targetSilhouette ?? (frame.ghost && frame.targetBox ? figureFor(frame.ghost, frame.targetBox, aspect) : undefined);
+  if (target) drawTarget(ctx, target, map, t, matched);
+  if (frame.targetBox) drawTargetBox(ctx, frame.targetBox, map, t);
+  if (frame.silhouette) drawLiveOutline(ctx, frame.silhouette, map, t);
+  if (frame.live) drawLiveSkeleton(ctx, frame.live, map, matched, frame.highlight ?? []);
   if (typeof frame.levelErrorDeg === "number") drawLevel(ctx, frame.levelErrorDeg, map);
 }
 
-function drawTargetBox(ctx: CanvasRenderingContext2D, box: Box, map: ViewMap, score: number): void {
+/** Paints an image that covers the whole camera picture. */
+function drawOverPicture(ctx: CanvasRenderingContext2D, image: HTMLCanvasElement, map: ViewMap): void {
+  ctx.drawImage(image, map.x(0), map.y(0), map.imgW * map.scale, map.imgH * map.scale);
+}
+
+function drawTarget(ctx: CanvasRenderingContext2D, mask: SilhouetteMask, map: ViewMap, t: number, matched: boolean): void {
+  const fills = maskFills(mask);
+  ctx.save();
+  ctx.imageSmoothingEnabled = true;
+  ctx.globalAlpha = matched ? 0.24 : 0.16;
+  drawOverPicture(ctx, matched ? fills.green : fills.white, map);
+  ctx.globalAlpha = 1;
+  ctx.setLineDash([9, 7]);
+  ctx.lineWidth = 2.5;
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  ctx.strokeStyle = guideColour(t, 0.95);
+  ctx.shadowColor = "rgba(0, 0, 0, 0.45)";
+  ctx.shadowBlur = 4;
+  traceMask(ctx, mask, map);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** Strokes every outline of a mask as one path, mapped onto the view. */
+function traceMask(ctx: CanvasRenderingContext2D, mask: SilhouetteMask, map: ViewMap): void {
+  ctx.beginPath();
+  for (const line of contourOf(mask)) {
+    ctx.moveTo(map.x(line[0]), map.y(line[1]));
+    for (let i = 2; i < line.length; i += 2) ctx.lineTo(map.x(line[i]), map.y(line[i + 1]));
+  }
+}
+
+function drawLiveOutline(ctx: CanvasRenderingContext2D, mask: SilhouetteMask, map: ViewMap, t: number): void {
+  ctx.save();
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  // A faint dark edge first, so the outline also reads on light backgrounds.
+  ctx.strokeStyle = "rgba(0, 0, 0, 0.28)";
+  ctx.lineWidth = 6;
+  traceMask(ctx, mask, map);
+  ctx.stroke();
+  // Then the glowing line itself.
+  ctx.strokeStyle = liveColour(t, 0.95);
+  ctx.shadowColor = liveColour(t, 0.9);
+  ctx.shadowBlur = 12;
+  ctx.lineWidth = 2.75;
+  traceMask(ctx, mask, map);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawTargetBox(ctx: CanvasRenderingContext2D, box: Box, map: ViewMap, t: number): void {
   const x = map.x(box.x);
   const y = map.y(box.y);
   const w = box.w * map.imgW * map.scale;
   const h = box.h * map.imgH * map.scale;
-  const arm = Math.min(w, h) * 0.14;
+  const arm = Math.min(w, h) * 0.12;
   ctx.save();
   ctx.lineWidth = 3;
   ctx.lineCap = "round";
-  ctx.strokeStyle = ghostColour(score, 0.9);
+  ctx.strokeStyle = guideColour(t, 0.7);
   ctx.beginPath();
   // Four corner brackets.
   ctx.moveTo(x, y + arm);
@@ -168,52 +327,54 @@ function drawTargetBox(ctx: CanvasRenderingContext2D, box: Box, map: ViewMap, sc
   ctx.restore();
 }
 
-interface FigureStyle {
-  width: number;
-  colour: string;
-  headRadius?: number;
-  glow?: boolean;
-  dots?: boolean;
-}
-
-function drawFigure(
+function drawLiveSkeleton(
   ctx: CanvasRenderingContext2D,
-  pts: Partial<Record<PosePointName, Point2>>,
-  style: FigureStyle,
+  live: Partial<Record<PosePointName, Point2>>,
+  map: ViewMap,
+  matched: boolean,
+  highlight: Limb[],
 ): void {
+  const flagged = new Set(highlight);
+  const px = (name: PosePointName): Point2 | null => {
+    const p = live[name];
+    return p ? [map.x(p[0]), map.y(p[1])] : null;
+  };
   ctx.save();
-  ctx.lineWidth = style.width;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
-  ctx.strokeStyle = style.colour;
-  ctx.fillStyle = style.colour;
-  if (style.glow) {
-    ctx.shadowColor = "rgba(0, 0, 0, 0.45)";
-    ctx.shadowBlur = style.width * 1.5;
-  }
-  ctx.beginPath();
+  ctx.shadowColor = "rgba(0, 0, 0, 0.5)";
+  ctx.shadowBlur = 3;
   for (const [a, b] of BONES) {
-    const p = pts[a];
-    const q = pts[b];
+    const p = px(a);
+    const q = px(b);
     if (!p || !q) continue;
+    const limb = boneLimb(a, b);
+    const isFlagged = !matched && flagged.has(limb);
+    ctx.strokeStyle = matched ? GREEN : isFlagged ? RED : WHITE;
+    ctx.lineWidth = isFlagged ? 5 : 3.5;
+    ctx.beginPath();
     ctx.moveTo(p[0], p[1]);
     ctx.lineTo(q[0], q[1]);
-  }
-  ctx.stroke();
-
-  const nose = pts.nose;
-  if (nose && style.headRadius) {
-    ctx.beginPath();
-    ctx.arc(nose[0], nose[1], style.headRadius, 0, Math.PI * 2);
     ctx.stroke();
   }
-  if (style.dots) {
-    for (const p of Object.values(pts)) {
-      if (!p) continue;
-      ctx.beginPath();
-      ctx.arc(p[0], p[1], style.width * 1.4, 0, Math.PI * 2);
-      ctx.fill();
-    }
+  // Joints.
+  ctx.fillStyle = matched ? GREEN : WHITE;
+  for (const name of Object.keys(live) as PosePointName[]) {
+    if (name === "nose") continue;
+    const p = px(name);
+    if (!p) continue;
+    ctx.beginPath();
+    ctx.arc(p[0], p[1], 3.2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // The head, only when the coach is asking about it.
+  const nose = px("nose");
+  if (nose && !matched && flagged.has("head")) {
+    ctx.strokeStyle = RED;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(nose[0], nose[1], 18, 0, Math.PI * 2);
+    ctx.stroke();
   }
   ctx.restore();
 }
