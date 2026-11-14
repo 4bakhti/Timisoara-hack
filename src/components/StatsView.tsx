@@ -16,6 +16,7 @@ import { api } from "@/lib/api";
 import { APP_VERSION } from "@/lib/brand";
 import type { Health, Lang, Stats } from "@/lib/contracts";
 import { useLang } from "@/state/lang";
+import { storageMode } from "@/state/storage";
 import { useLoaded } from "@/state/useLoaded";
 
 /** Below this many sessions in total, the page says the numbers are small. */
@@ -25,8 +26,8 @@ const page =
   "mx-auto flex min-h-dvh w-full max-w-3xl flex-col gap-5 pt-[max(1rem,env(safe-area-inset-top))] pr-[max(1rem,env(safe-area-inset-right))] pb-[max(1.5rem,env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))]";
 
 async function loadStats(): Promise<{ stats: Stats | null; health: Health }> {
-  const [stats, health] = await Promise.all([api.stats(), api.health()]);
-  return { stats, health };
+  const [result, health] = await Promise.all([api.statsResult(), api.health()]);
+  return { stats: result.status === "ok" ? result.stats : null, health };
 }
 
 function signed(value: number, lang: Lang): string {
@@ -102,7 +103,7 @@ export function StatsView() {
         </section>
       ) : (
         <>
-          {value && !value.health.db && (
+          {value && storageMode(value.health, stats) === "memory" && (
             <p className={notice} data-state="temporary">
               {t("statsTemp", lang)}
             </p>

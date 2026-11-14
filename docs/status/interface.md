@@ -1,103 +1,63 @@
 # Interface: status
 
-Updated: Sat 14 Nov, 11:00
+Updated: Sat 14 Nov 2026
 
-Branch: `claude-2/interface-extras`, from `main` at `0439c62`. Pull request: https://github.com/4bakhti/Timisoara-hack/pull/2 into `main`, not merged. Not deployed.
+Branch: `claude-2/interface-part2`. Parts 1–3 were merged into `main` through PR #4 (`3c1a7ae`). Parts 4–5 and this file are in a new pull request into `main` (link in the PR list; not merged). Not deployed.
 
 ## Routes
 
-| Route | What it is | Backend it needs |
+| Route | What it is | Backend it uses |
 |---|---|---|
-| `/` | Home, now in both languages, with links to the other screens | none |
-| `/shoot` | The shooting flow (fixes only, same architecture and tracker) | `/api/analyze`, `/api/review`, `/api/guide` (exist); `/api/feedback`, `/api/recipes` (missing) |
-| `/recipes` | Public recipe list | `GET /api/recipes` (missing) |
-| `/r/[id]` | One recipe: details, link, QR code, "Recreate this shot" | `GET /api/recipes/[id]` (missing) |
-| `/stats` | Results by app version | `GET /api/stats` (missing) |
+| `/` | Home in both languages. On screens 1024 px and wider, a QR code for `<this address>/shoot` with "Scan to try it on your phone". Links to recipes, results, demo, lab | none |
+| `/shoot` | The shooting flow. `?round=round-1` labels feedback (letters, digits, dashes, up to 20 characters; anything else is ignored) | analyze, review, guide, preview, feedback, recipes, events, health, optional voice session |
+| `/demo` | The whole flow on a drawn scene, the bundled sample plan, the scripted coach and the sample review. Every screen says "Demo: sample data" | none: no requests except the local drawing |
+| `/recipes` | Public recipes | `GET /api/recipes` |
+| `/r/[id]` | One recipe, link, QR code, "Recreate this shot" | `GET /api/recipes/[id]`, `POST /api/recipes/[id]/use` |
+| `/stats` | Recorded results by app version | `GET /api/stats` |
+| `/manifest.webmanifest`, `/icon.svg`, `/apple-icon` | Web manifest (`start_url: /shoot`, portrait, dark), drawn SVG icon, PNG home-screen icon drawn from the same shapes | none |
 
-## Done
+## What each part does
 
-**`/shoot` (milestone 1).** Found by walking the flow, fixed without touching `src/vision` or `src/coach`:
-- A failed camera switch left a black screen with no message. It now releases the camera and returns to the first screen with the reason.
-- Two quick taps on "Read my scene" started two readings. Now one.
-- A picture that cannot be read failed silently. It now says so.
-- No way back from the camera step. "Back" now releases the camera.
-- The rating showed "Thank you!" whatever the server answered (quality review Q4). Replaced, see below.
-- A late review for an earlier shot could replace the current one (quality review Q3). Answers are now tied to the shot they belong to, for the score and the review.
-- A photo delivered after the user left coaching is ignored by the screen. The engines can still fire after `stop()` (quality review Q1); that part belongs to the coach code.
-- An unscored "before" picture showed a total of 0. Unmeasured values now show "–" with "not measured" for screen readers, and a line says what the score does and does not mean.
-- "Scoring…" stayed up while the review was loading. It now says "Comparing your two photos…".
-- Sample ideas carry a sentence saying the scene was not read. Sample review text is labelled "Sample text, not about your photos".
-- Wide (landscape) ideas squeezed the card text into a thin column. The drawing is now sized by its width.
-- Kept: the single mounted `<video>`, front-camera mirroring, the camera/audio/motion gesture, coaching stopped after capture, native voice fallback.
-
-**Feedback (milestone 2).** `src/components/FeedbackForm.tsx`: 1–5 rating (native radio group), optional comment (500 characters), sending state, one request per tap, retry that keeps the rating and comment and reuses the same session code. "Saved" appears only when `api.feedback` returns `true`. Anything else says "Your feedback was not saved". When it is saved and `health.db` is false, the message says it went to temporary demo storage.
-
-**Recipes and QR (milestone 3).**
-- `RecipePublisher` on the result screen: preview of title, the shot, optional place, optional position (asked only on a tap, rounded to four decimals), a plain statement of what becomes public, then an explicit "Publish recipe". No photo is sent; a test checks the request body.
-- Link and QR appear only after `api.recipes.create` returned a recipe with status `public`. A draft or hidden answer says so and shows no link. Failures say "Not published" with the reason (sign-in, missing route, not configured, rate limit, rejected, unreachable, unconfirmed) and keep the form for a retry.
-- The QR code is drawn from the actual share address. A test compares it square by square with the QR library's own renderer.
-- `/recipes`: list without any position. "Sort by distance from me" is optional and sorts on the phone; the position is not sent.
-- `/r/[id]`: loading, could-not-load (with retry) and loaded states. "Recreate this shot" opens `ShootFlow` with the recipe; the camera is still requested from "Open the camera", then "Start coaching this shot" takes the recipe's idea into the coach. The scene is not read. The two photos are compared only when the user presses "Compare my two photos".
-- Sample ideas cannot be published (see requests below).
-
-**Results (milestone 4).** `/stats` shows only what `api.stats` returned: sessions, sessions that ended with a photo, median time, average score change, ratings, blind votes. Unmeasured values read "Not measured" and missing ratings read "No ratings yet", never 0. Unavailable, empty and temporary-storage are three different states. The page states that the match score is not a measure of photo quality, and warns when there are fewer than 30 sessions.
-
-**Languages and mobile (milestone 5).** One language choice shared by all screens (`src/state/lang.ts`, stored on the device, follows the browser until changed). Every new string exists in English and Romanian; a test checks both exist with the same placeholders. Touch targets are at least 44 px, focus is outlined, safe-area padding on all sides, 16 px inputs.
+1. **Judges' entry.** Desktop QR code, app icon, manifest, bilingual page description, `?round=` passed to the feedback form.
+2. **Demo mode.** `ShootFlow` with `demo`: no camera, network or AI. The coach speaks with the phone's own voice only (`deviceSpeech`), so even `/api/speak` is not called. The "before" picture is not scored, because scoring would download the tracking model; it shows "not measured". Recipes and feedback are off, with the reason shown. `/shoot` links to the demo after a camera refusal, a missing camera, an insecure address, or when the scene could not be read.
+3. **Voice conversation.** Hidden unless `health.voiceConversation` is true (it is false on this server). When available: "Talk to the coach" → the consent line (microphone audio goes to ElevenLabs, no photos) → "Start talking", which calls `unlockAudio()` and `director.start(lang)` in that tap. The control shows status, a mic mute and "Stop talking", and gives the reason on error while the touch controls keep working. `selectIdea`, `setCoachingPaused` and `requestCapture` use the same paths as touch, call `cancelPendingCapture()` first and check the abort signal before changing anything. A spoken pause shows "Paused" with a touch "Resume". Context goes to the director on every change and every 2 s: offered ideas, selected idea, scene facts only for a real reading, coach phase, instruction, person tracked, paused, camera ready. No images or landmarks are sent. The speech object goes to the coach only while talking. A language change restarts the conversation. The result screen calls `end({ afterCapture: true })`; leaving the flow calls `end()`. The demo never mounts the director, because it checks the server on mount.
+4. **Layout.** On landscape phones and screens 1024 px and wider, the camera fills the width; video, picture and overlay canvas share one box (checked: all 812×375 at 812×375). Panels and bottom controls keep a 512 px column. Idea cards are capped at 384 px, and the before/after pictures at 70% of the screen height in landscape. Fixes found in the walk: the ideas header wraps instead of squeezing the title, the sample note sits on a dark backing, and camera pills are at least 44 px wide.
+5. **Storage routes (after Codex-2's merge).** `RecipeView` uses `recipes.load`: "There is no recipe at this link" (no retry) vs "service did not answer" (retry). `RecipeList` uses `listResult`: "No recipes have been published yet" vs "The recipe list is not available". `StatsView` uses `statsResult`. The storage mode comes from `stats.storage`, then `health.storage`, then `health.db` (`src/state/storage.ts`). Feedback sends `afterTotal`, and `beforeTotal` only when the "before" picture was scored. `recipes.use(id)` is called once per visit, from "Start coaching this shot", never on page load. Sample ideas can be published with `sample: true` and are labelled "Made from sample suggestions" in the preview, the published card, the list and the detail page.
 
 ## Checks actually run
 
 | Check | Result | Backend |
 |---|---|---|
-| `npm run check` on untouched `main` | passed, 53 tests | not involved |
-| `npm run check` on this branch | passed: types, lint, tests, build | not involved |
-| Unit and interaction tests | 100 passed (53 existing, 47 new) | **mocked** (`vi.mock`) |
-| Save-honesty check: forced the two components to claim success, reran tests | 5 tests failed as they should, then restored | mocked |
-| `/shoot` with a picture, English, 375×812: camera refusal, upload, ideas, coaching, capture, result | reached a result | analyze, review, guide **real**; events missing |
-| Same in Romanian at 320×568 | reached a result, no sideways overflow, no control under 44 px | analyze fell back to sample; review **real** |
-| Feedback and publish against this branch as it is | "not saved" and "Not published", one request each on a double tap, no link shown | **unavailable** (404) |
-| `/stats`, `/recipes`, `/r/<unknown>` as they are | unavailable / could-not-load states | **unavailable** (404) |
-| Feedback saved, recipe published with link and QR, open `/r/<id>`, recreate, coach, capture, compare on request; list and results with data | worked | feedback, recipes, stats **mocked in the browser** (a temporary `fetch` stand-in, not in the repository); guide **real** |
-| Landscape 812×375 and desktop 1280×800 | usable; keyboard focus outline visible | as above |
+| `npm run check` after each part | passed every time; final: types, lint, 232 tests passed, 7 skipped (other workstreams' opt-in tests), build | not involved |
+| Interaction tests added in this branch | round label, desktop QR, demo (no server calls, labels, disabled saving), voice (14 tests), recipe not-found vs unavailable, list unavailable vs empty, stats storage mode, sample recipes, use counted on start only, feedback totals | **mocked** (`vi.mock`; `@/voice` replaced by a stand-in) |
+| `/` at 1280×800 and 375×812 | QR on desktop only; manifest, icons and description served | none |
+| `/demo` in English 375×812 and 430×932, Romanian 320×568 and 812×375 | reaches a result; badge on every step; network log empty apart from the drawing | none (verified) |
+| `/shoot` with the server reporting `voiceConversation: false` | no voice control; same buttons as before | **real** health |
+| Voice conversation with a configured agent | not run | **unavailable**: no ElevenLabs agent or credentials |
+| Size walk: `/`, `/shoot`, `/demo` (all steps), `/recipes`, `/r/<id>`, `/stats` at 320, 375 and 430 px, and 812×375, in English and Romanian | no sideways overflow; no button under 44×44 after the fixes above | real routes on `localhost` |
+| Real routes, 375×812: sample-idea capture → feedback → publish → open link → recreate → list → stats | feedback "saved in temporary demo storage" (200); recipe published (201) with `sample: true`, link and QR; detail page loads; `uses` went to 1 after two starts in one visit; unknown id shows "no recipe at this link" (server 404 `not_found`); list shows the sample label; stats show 1 session, 1 rating, temporary-storage note | **real**, in-memory storage, no database |
+| Scene reading during that run | Gemini answered 200 but fell back to sample ideas | **real** (fallback) |
 
-Device coverage: a desktop browser pane at phone sizes, using a drawn picture instead of the camera. **No real phone, no live camera, no deployed HTTPS address, no voice or outline-alignment check.** The pane blocks the camera, which is how the refusal path was exercised. The QR code was not scanned with a phone.
+Device coverage: a desktop browser pane at phone sizes, with a drawn picture instead of the camera. **No real phone, no live camera, no deployed HTTPS address.** The QR codes were not scanned with a phone; a unit test checks the drawn squares against the QR library's own output.
 
-## Not verified
-- Anything against real feedback, recipes or stats routes. They do not exist on `main` or on this branch.
-- A person in front of a live camera, front-camera mirroring on a device, speech on iOS and Android.
+## Pending / not verified
+- Voice conversation with a real ElevenLabs agent: consent, microphone, spoken actions, interruptions, Romanian. Only the mocked director was tested.
+- Anything on a physical phone: camera, audio unlock, the overlay on a live feed, safe areas, the QR scan.
 - Romanian wording by a native speaker.
-- The quality branch's phone protocol (`docs/quality/PHONE-TEST.md`).
+- Sample plans in `src/lib/fixtures.ts` are English only, so the demo's ideas and review stay English in Romanian (fixtures belong to the integrator).
+- With a database instead of memory: not checked.
 
-## Findings for the server workstream
-Observed with a real `GEMINI_API_KEY` on `localhost`:
-- Default model `gemini-4-hydrogen`: `POST /api/analyze` was aborted at its 14 s limit in 2 of 2 tries and answered with sample data. `POST /api/review` answered for real in about 12 s.
-- With `GEMINI_MODEL=gemini-3.5-flash-lite` in a local, uncommitted `.env.local`: analyze gave 2 confirmed real answers (3–4 s) and 2 fallbacks to sample data after the provider returned 503 "high demand"; a fifth try was not recorded.
-- One real review described improvements between two identical pictures whose scores were both 0. It was not sample text, so it carried no label.
-- A scene without a person scored `framing: 0` for the "before" picture, where the contract says `null` when framing could not be measured.
-- The sample plan and sample ideas are English only, so they stay English in the Romanian interface.
-- `npm install` adds `"hasInstallScript": true` to `package-lock.json`. Not committed here.
-
-## Requests to the server workstream (additive, backward compatible)
-1. `api.feedback`, `api.recipes.list`, `api.recipes.get` and `api.stats` return `false`, `[]` or `null` for every kind of failure. Add a way to tell "route missing or failed" from "empty" and "not found". Until then `/recipes` and `/r/[id]` say they cannot tell which it is.
-2. Say whether storage is temporary in the feedback, recipe and stats answers. The interface currently infers it from `health.db === false`, which is wrong if the health route itself fails.
-3. `Recipe` has no field marking sample data, so sample ideas are refused. An optional `sample` flag on `Recipe` and `RecipeCreateRequest` would let them be published with a label.
-4. Routes: `POST /api/feedback`, `GET/POST /api/recipes`, `GET /api/recipes/[id]`, `GET /api/stats`, `POST /api/events`. The interface expects `POST /api/recipes` to answer with the stored `Recipe` (status `public` when it is listed) and `GET /api/recipes/[id]` to answer 404 for unknown ids.
-5. `Recipe.uses` is shown as "Uses: n" when above 0; say what increments it.
-6. Feedback uses its own random session code; the coach's event session id is not exposed, so the two cannot be joined.
-
-## Integration
-- Depends on: nothing new in `package.json`. Uses `qrcode` (already a dependency) and `jsdom` with `@testing-library/react` (already dev dependencies) through `// @vitest-environment jsdom` in each component test. No config change.
-- Touches no file owned by another workstream. No overlap with `quality/release-readiness`.
-- After the server routes land: rerun the "mocked in the browser" row against the real routes before calling recipes, feedback or results integrated.
-- `APP_VERSION` is unchanged (`src/lib/brand.ts` is not an interface file). Bump it if results from before and after this change should be told apart.
+## For the integrator
+- Merge the new PR (parts 4–5). It touches only interface files. It was merged with `origin/main` at `7d8e74a` (conflict in `IdeaCard.tsx` resolved by keeping the AI-preview block and adding `max-w-sm`).
+- Usage events: in the real-route run, a manual capture on `/shoot` sent no `POST /api/events`. The recipe recreation that was left without a capture did send one. Coach code, not changed here.
+- `/api/stats?round=round-1` reported 0 sessions while that round had a rating: events do not carry the round yet (the coach-code change you planned).
+- `avgScoreGain: 0` in that run is real: both totals were 0 on the drawn test picture.
+- The "before" framing score for scenes without a person is still 0, not `null` (vision code, as planned).
 
 ## Steps to reproduce
-1. `npm install`, `npm run dev`, open `/shoot`.
-2. "Use a picture instead", choose any picture, "Read my scene". Without a key, or when the provider fails, ideas are labelled "Sample suggestions".
-3. Pick an idea, "Take it now". On the result: choose a rating, "Send feedback" → "Your feedback was not saved" until the route exists.
-4. With a real reading: "Turn this shot into a recipe" → "Publish recipe" → "Not published. The recipe service is not available on this server yet." until the route exists.
-5. `/recipes`, `/r/anything`, `/stats` show their unavailable states until the routes exist.
-
-## Known limits
-- Landscape phones get the same centred 512 px column; the camera view is not widened.
-- A recipe's `targetPose` is stored but the coach looks the pose up by `poseTemplateId`; an id unknown to the local library falls back to the default pose.
-- Maps, sign-in, blind-vote pages, app icon and manifest are not built.
+1. `npm install`, `npm run dev`.
+2. Desktop width: open `/` and look for the QR code. Phone width: it is gone.
+3. `/demo` → "Start the demo" → "Show the sample ideas" → "Use this shot" → wait about 13 s or tap "Take it now". Every screen shows "Demo: sample data"; the browser's network tab shows no API calls.
+4. `/shoot?round=round-1` → "Use a picture instead" → "Read my scene" → an idea → "Take it now" → rate and send. The feedback says it went to temporary demo storage; `GET /api/stats?round=round-1` shows the rating.
+5. On the result: "Turn this shot into a recipe" → "Publish recipe" → "Open the recipe" → "Recreate this shot" → "Use a picture instead" → "Start coaching this shot". `GET /api/recipes/<id>` shows `uses: 1`.
+6. `/r/does-not-exist` says there is no recipe at that link.

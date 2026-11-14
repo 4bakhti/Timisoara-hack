@@ -18,6 +18,7 @@ import { t, tf } from "@/i18n/strings";
 import { api } from "@/lib/api";
 import type { Lang } from "@/lib/contracts";
 import { useLang } from "@/state/lang";
+import { storageMode } from "@/state/storage";
 import { useLoaded } from "@/state/useLoaded";
 
 function formatDate(iso: string, lang: Lang): string | null {
@@ -29,13 +30,14 @@ function formatDate(iso: string, lang: Lang): string | null {
 export function RecipeView({ id }: { id: string }) {
   const lang = useLang();
   const load = useCallback(async () => {
-    const [recipe, health] = await Promise.all([api.recipes.get(id), api.health()]);
-    return { recipe, health };
+    const [result, health] = await Promise.all([api.recipes.load(id), api.health()]);
+    return { result, health };
   }, [id]);
   const { value, loading, reload } = useLoaded(load);
   const [recreating, setRecreating] = useState(false);
 
-  const recipe = value?.recipe ?? null;
+  const recipe = value?.result.status === "ok" ? value.result.recipe : null;
+  const notFound = value?.result.status === "not_found";
 
   if (recipe && recreating) return <ShootFlow recipe={recipe} onExit={() => setRecreating(false)} />;
 
@@ -55,11 +57,13 @@ export function RecipeView({ id }: { id: string }) {
       <main className={shell}>
         <ScreenHeader title={t("recipesTitle", lang)} backHref="/recipes" backLabel="allRecipes" lang={lang} />
         <section className={`${card} grid gap-3`} role="alert">
-          <h2 className="text-lg font-semibold">{t("recipeMissing", lang)}</h2>
-          <p className="text-sm leading-snug text-neutral-300">{t("recipeMissingWhy", lang)}</p>
-          <button type="button" className={secondary} onClick={reload}>
-            {t("retry", lang)}
-          </button>
+          <h2 className="text-lg font-semibold">{t(notFound ? "recipeNotFound" : "recipeMissing", lang)}</h2>
+          <p className="text-sm leading-snug text-neutral-300">{t(notFound ? "recipeNotFoundWhy" : "recipeUnavailableWhy", lang)}</p>
+          {!notFound && (
+            <button type="button" className={secondary} onClick={reload}>
+              {t("retry", lang)}
+            </button>
+          )}
           <Link href="/recipes" className={secondary}>
             {t("allRecipes", lang)}
           </Link>
@@ -83,7 +87,8 @@ export function RecipeView({ id }: { id: string }) {
       <p className="-mt-3 text-sm text-neutral-400">{byline.join(" · ")}</p>
 
       {recipe.status !== "public" && <p className={notice}>{tf("notPublicBanner", lang, { status: recipe.status })}</p>}
-      {value && !value.health.db && <p className={notice}>{t("tempStorageRecipe", lang)}</p>}
+      {recipe.sample && <p className={notice}>{t("madeFromSample", lang)}</p>}
+      {value && storageMode(value.health) === "memory" && <p className={notice}>{t("tempStorageRecipe", lang)}</p>}
 
       <section className={card}>
         <IdeaSummary idea={recipe.idea} lang={lang} />

@@ -9,7 +9,7 @@ import type { Recipe } from "@/lib/contracts";
 
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
-  return { ...actual, api: { ...actual.api, health: vi.fn(), recipes: { list: vi.fn(), get: vi.fn(), create: vi.fn() } } };
+  return { ...actual, api: { ...actual.api, health: vi.fn(), recipes: { list: vi.fn(), get: vi.fn(), create: vi.fn(), load: vi.fn(), listResult: vi.fn(), use: vi.fn(async () => true) } } };
 });
 
 const create = vi.mocked(api.recipes.create);
@@ -133,12 +133,26 @@ describe("RecipePublisher", () => {
     expect(await screen.findByText(t("tempStorageRecipe", "en"))).toBeTruthy();
   });
 
-  it("refuses to publish a sample idea", () => {
+  it("publishes a sample idea with the sample flag, and says so before and after", async () => {
+    create.mockResolvedValue({ ...TEST_RECIPE, sample: true });
     render(<RecipePublisher idea={TEST_IDEA} sample lang="en" />);
     open();
-    expect(screen.getByText(t("samplePublishBlocked", "en"))).toBeTruthy();
-    expect(screen.queryByRole("button", { name: t("publish", "en") })).toBeNull();
+    expect(screen.getByText(t("samplePublishNote", "en"))).toBeTruthy();
     expect(create).not.toHaveBeenCalled();
+    fireEvent.click(publishButton());
+    expect(await screen.findByText(t("published", "en"))).toBeTruthy();
+    expect(create.mock.calls[0][0]).toMatchObject({ sample: true });
+    expect(screen.getByText(t("madeFromSample", "en"))).toBeTruthy();
+  });
+
+  it("does not mark a real idea as a sample", async () => {
+    create.mockResolvedValue(TEST_RECIPE);
+    render(<RecipePublisher idea={TEST_IDEA} sample={false} lang="en" />);
+    open();
+    expect(screen.queryByText(t("samplePublishNote", "en"))).toBeNull();
+    fireEvent.click(publishButton());
+    await screen.findByText(t("published", "en"));
+    expect(create.mock.calls[0][0]).not.toHaveProperty("sample");
   });
 
   it("adds a position only when asked, rounded to about ten metres", async () => {

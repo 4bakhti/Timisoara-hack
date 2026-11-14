@@ -5,18 +5,28 @@ import { StatsView } from "@/components/StatsView";
 import { HEALTH_NO_DB, HEALTH_WITH_DB, TEST_STATS } from "@/components/test-fixtures";
 import { t } from "@/i18n/strings";
 import { api } from "@/lib/api";
+import type { Stats } from "@/lib/contracts";
 
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
-  return { ...actual, api: { ...actual.api, health: vi.fn(), stats: vi.fn() } };
+  return { ...actual, api: { ...actual.api, health: vi.fn(), stats: vi.fn(), statsResult: vi.fn() } };
 });
 
-const stats = vi.mocked(api.stats);
+/** What the server answers in each test; null stands for "unavailable". */
+const stats = vi.fn<() => Promise<Stats | null>>();
 const health = vi.mocked(api.health);
 const state = (name: string) => document.querySelector(`[data-state="${name}"]`);
 
 beforeEach(() => {
   stats.mockReset();
+  vi.mocked(api.statsResult).mockReset();
+  vi.mocked(api.statsResult).mockImplementation(async () => {
+    const answer = await stats();
+    return answer ? { status: "ok", stats: answer } : { status: "unavailable" };
+  });
+  vi.mocked(api.stats).mockImplementation(() => {
+    throw new Error("the results screen must use statsResult");
+  });
   health.mockReset();
   health.mockResolvedValue(HEALTH_WITH_DB);
 });
@@ -102,5 +112,19 @@ describe("StatsView", () => {
     expect(screen.getByText(t("statsSmall", "en"))).toBeTruthy();
     // The match score is never presented as a measure of quality.
     expect(screen.getByText(t("scoreCaveat", "en"))).toBeTruthy();
+  });
+
+  it("trusts the storage mode the stats answer reports over the health flag", async () => {
+    stats.mockResolvedValue({ ...TEST_STATS, storage: "memory" });
+    health.mockResolvedValue({ ...HEALTH_WITH_DB, storage: "database" });
+    render(<StatsView />);
+    expect(await screen.findByText(t("statsTemp", "en"))).toBeTruthy();
+    cleanup();
+
+    stats.mockResolvedValue({ ...TEST_STATS, storage: "database" });
+    health.mockResolvedValue(HEALTH_NO_DB);
+    render(<StatsView />);
+    await screen.findByText("Version 0.1.0");
+    expect(screen.queryByText(t("statsTemp", "en"))).toBeNull();
   });
 });

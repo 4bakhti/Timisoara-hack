@@ -67,7 +67,7 @@ export function IdeaCard({
 }) {
   const ready = preview?.status === "ready" ? preview : null;
   return (
-    <article className="flex w-[84%] shrink-0 snap-center flex-col gap-3 rounded-2xl bg-neutral-900/95 p-4 ring-1 ring-white/10">
+    <article className="flex w-[84%] max-w-sm shrink-0 snap-center flex-col gap-3 rounded-2xl bg-neutral-900/95 p-4 ring-1 ring-white/10">
       {preview && preview.status !== "failed" && (
         <figure className="relative h-64 overflow-hidden rounded-xl bg-neutral-950">
           {ready ? (

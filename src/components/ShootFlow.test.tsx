@@ -69,7 +69,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
       review: vi.fn(),
       feedback: vi.fn(),
       health: vi.fn(),
-      recipes: { list: vi.fn(), get: vi.fn(), create: vi.fn() },
+      recipes: { list: vi.fn(), get: vi.fn(), create: vi.fn(), load: vi.fn(), listResult: vi.fn(), use: vi.fn(async () => true) },
     },
   };
 });
@@ -91,6 +91,7 @@ beforeEach(() => {
   review.mockReset();
   createRecipe.mockReset();
   vi.mocked(api.feedback).mockReset();
+  vi.mocked(api.recipes.use).mockClear();
   vi.mocked(api.health).mockResolvedValue(HEALTH_NO_DB);
   review.mockResolvedValue({ ...sampleReview("en"), mock: true });
   setLang("en");
@@ -157,7 +158,7 @@ describe("ShootFlow: a picture instead of the camera", () => {
     expect(screen.getByText(t("rate", "en"))).toBeTruthy();
 
     fireEvent.click(button(t("makeRecipe", "en")));
-    expect(screen.getByText(t("samplePublishBlocked", "en"))).toBeTruthy();
+    expect(screen.getByText(t("samplePublishNote", "en"))).toBeTruthy();
     expect(createRecipe).not.toHaveBeenCalled();
     // The coach is no longer fed once the photo is taken.
     expect(coach.options?.still).toBeNull();
@@ -258,8 +259,11 @@ describe("ShootFlow: recreating a recipe", () => {
 
     choosePicture();
     expect(screen.queryByRole("button", { name: t("readScene", "en") })).toBeNull();
+    expect(api.recipes.use).not.toHaveBeenCalled();
     fireEvent.click(button(t("startRecipe", "en")));
     await waitFor(() => expect(coach.options?.still).toBe("blob:test-picture"));
+    expect(api.recipes.use).toHaveBeenCalledTimes(1);
+    expect(api.recipes.use).toHaveBeenCalledWith(TEST_RECIPE.id);
     expect(coach.options?.idea).toEqual(TEST_RECIPE.idea);
     expect(analyze).not.toHaveBeenCalled();
 
@@ -361,6 +365,29 @@ describe("ShootFlow: test-round label", () => {
     fireEvent.click(await screen.findByRole("radio", { name: "4 out of 5" }));
     fireEvent.click(button(t("sendFeedback", "en")));
     await waitFor(() => expect(api.feedback).toHaveBeenCalledTimes(1));
-    expect(vi.mocked(api.feedback).mock.calls[0][0]).toMatchObject({ rating: 4, round: "round-1" });
+    // The result screen's two totals go with it: before 31 (scored), after 72.
+    expect(vi.mocked(api.feedback).mock.calls[0][0]).toMatchObject({ rating: 4, round: "round-1", beforeTotal: 31, afterTotal: 72 });
+  });
+});
+
+describe("ShootFlow: feedback totals", () => {
+  it("leaves the before total out when the before picture was not scored", async () => {
+    const { scoreStill } = await import("@/vision");
+    vi.mocked(scoreStill).mockResolvedValueOnce(null as never);
+    analyze.mockResolvedValue({ plan: SAMPLE_PLAN_PERSON });
+    vi.mocked(api.feedback).mockResolvedValue(true);
+    render(<ShootFlow />);
+    choosePicture();
+    fireEvent.click(button(t("readScene", "en")));
+    await screen.findByText(t("pickShot", "en"));
+    fireEvent.click(screen.getAllByRole("button", { name: t("useShot", "en") })[0]);
+    act(() => button(t("shutter", "en")).click());
+    fireEvent.click(await screen.findByRole("radio", { name: "3 out of 5" }));
+    await waitFor(() => expect(screen.getAllByText(t("notMeasured", "en")).length).toBeGreaterThan(4));
+    fireEvent.click(button(t("sendFeedback", "en")));
+    await waitFor(() => expect(api.feedback).toHaveBeenCalledTimes(1));
+    const sent = vi.mocked(api.feedback).mock.calls[0][0];
+    expect(sent).not.toHaveProperty("beforeTotal");
+    expect(sent).toMatchObject({ afterTotal: 72 });
   });
 });
