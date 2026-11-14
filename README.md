@@ -34,8 +34,8 @@ flowchart LR
 - **Planning (Gemini).** The model must answer with JSON that matches a strict schema (`src/lib/contracts.ts`), including the target box the coach steers toward. The answer is validated, retried once with the validation errors, and falls back to a second fast model when the first is overloaded. Sample data is always labelled as such.
 - **Coaching (on the device).** Pose matching uses joint angles, so it doesn't matter how far away the person stands. Framing compares the body's position and size with the target box. A rules engine picks the single most useful correction, waits until it is stable before switching, paces what it says, and never repeats itself straight away.
 - **Voice (ElevenLabs).** Corrections are spoken with ElevenLabs text-to-speech (Flash v2.5, English and Romanian), falling back to the phone's own voice. An optional voice conversation lets you say "next idea", "pause" or "take it", through the same safe paths as the buttons.
-- **Data (PostgreSQL / Tiger Data).** Usage numbers, feedback and recipes are stored in PostgreSQL. With TimescaleDB available, coach events become a hypertable. Without a database the app uses clearly labelled temporary storage.
-- **Honest results.** `/stats` shows only measured numbers per app version (sessions, time to match, score gain, ratings) and says "not measured" instead of inventing zeros.
+- **Data (PostgreSQL / Tiger Data).** Usage numbers, feedback and recipes are stored in PostgreSQL. With TimescaleDB available, coach events become a hypertable, and a continuous aggregate rolls the live coaching samples up by hour for the results page (real-time, refreshed every 15 minutes). Verified on Tiger Data. Without a database the app uses clearly labelled temporary storage.
+- **Honest results.** `/stats` shows only measured numbers per app version (sessions, time to match, score gain, ratings) and says "not measured" instead of inventing zeros. An hour-by-hour chart of coaching sessions, with average live score and frame rate, says where its numbers come from.
 
 ## Try it
 
