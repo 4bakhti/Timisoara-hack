@@ -8,6 +8,7 @@
  * has their left side on the image's right.
  */
 import type { Point2, PosePointName, PosePoints } from "@/lib/contracts";
+import type { WorldPoints } from "./types";
 
 export type LivePoints = Partial<Record<PosePointName, Point2>>;
 
@@ -190,4 +191,15 @@ export function templateToImage(
 export function templatePlacement(points: PosePoints): BodyPlacement {
   // Template points are already isotropic with the figure filling a unit of height.
   return bodyPlacement(points)!;
+}
+
+/**
+ * Body turn and forward lean from 3D points: what a flat picture cannot show.
+ * TO BUILD (Person C): yaw from the shoulder line's depth (0 = facing the camera,
+ * positive = turned toward the person's left), lean from the hips→shoulders
+ * direction (0 = upright, positive = leaning toward the camera).
+ */
+export function bodyAngles3d(world: WorldPoints | undefined): { yawDeg: number | null; leanDeg: number | null } {
+  void world;
+  return { yawDeg: null, leanDeg: null };
 }

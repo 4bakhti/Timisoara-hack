@@ -2,7 +2,7 @@
  * The instructions given to Gemini. They live in one file so they can be read,
  * reviewed and improved like any other part of the product.
  */
-import type { CoachMode, Lang, ShotIdea, ShotScore } from "@/lib/contracts";
+import type { CoachMode, Lang, PoseTemplate, ShotIdea, ShotScore } from "@/lib/contracts";
 import { POSE_TEMPLATE_INFO } from "@/vision/poses/catalog";
 
 const LANGUAGE: Record<Lang, string> = { en: "English", ro: "Romanian" };
@@ -62,4 +62,23 @@ Write "fix" in ${LANGUAGE[lang]}.`;
 
 export function guideUser(idea: ShotIdea): string {
   return `The idea:\n${JSON.stringify({ title: idea.title, photographer: idea.photographer, framing: idea.framing, usesFromScene: idea.usesFromScene })}`;
+}
+
+/**
+ * Instruction for an AI pose preview: the same person in the same place, in the
+ * idea's pose. The picture is only ever shown as a labelled preview.
+ */
+export function previewPrompt(idea: ShotIdea, pose: Pick<PoseTemplate, "describe" | "tags">): string {
+  const fullBody = pose.tags.includes("full-body") && !pose.tags.includes("half-body");
+  return [
+    "Edit this photo. Keep exactly the same person: the same face, hair, skin tone, body shape, clothes and accessories.",
+    "Keep exactly the same place: the same background, objects, camera position, lens and light.",
+    `Change only the person's pose and where they stand, to this: ${idea.subject?.say ?? ""} (${pose.describe})`,
+    `Frame the photo like this: ${idea.photographer.say}`,
+    "The result must look like an ordinary, unedited phone photograph taken at the same moment: natural proportions, no beauty filter, no changes to the person's face or body.",
+    fullBody ? "Show the whole body, from head to feet." : "",
+    "No text, no borders, no extra people.",
+  ]
+    .filter(Boolean)
+    .join("\n");
 }

@@ -2,11 +2,22 @@ import { describe, expect, it } from "vitest";
 import { PHRASES, PHRASE_IDS } from "@/coach/phrases";
 import { POSE_TEMPLATES, POSE_TEMPLATE_INFO, getPoseTemplate } from "@/vision/poses/catalog";
 import { POSE_POINT_NAMES, PoseTemplate, ReviewResponse, ShotPlan } from "./contracts";
-import { SAMPLE_PLAN_OBJECT, SAMPLE_PLAN_PERSON, sampleReview } from "./fixtures";
+import { SAMPLE_PLAN_OBJECT, SAMPLE_PLAN_PERSON, SAMPLE_PLAN_PERSON_RO, samplePlan, sampleReview } from "./fixtures";
 
 describe("sample data matches the contracts", () => {
   it("person plan is valid", () => {
     expect(() => ShotPlan.parse(SAMPLE_PLAN_PERSON)).not.toThrow();
+  });
+
+  it("Romanian person plan is valid, keeps the same poses and framing, and is chosen for ro", () => {
+    expect(() => ShotPlan.parse(SAMPLE_PLAN_PERSON_RO)).not.toThrow();
+    SAMPLE_PLAN_PERSON_RO.ideas.forEach((idea, i) => {
+      expect(idea.subject?.poseTemplateId).toBe(SAMPLE_PLAN_PERSON.ideas[i].subject?.poseTemplateId);
+      expect(idea.framing).toEqual(SAMPLE_PLAN_PERSON.ideas[i].framing);
+      expect(idea.title).not.toBe(SAMPLE_PLAN_PERSON.ideas[i].title);
+    });
+    expect(samplePlan("ro")).toBe(SAMPLE_PLAN_PERSON_RO);
+    expect(samplePlan("en")).toBe(SAMPLE_PLAN_PERSON);
   });
 
   it("object plan is valid and asks for no pose", () => {

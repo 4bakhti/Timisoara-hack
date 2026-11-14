@@ -167,6 +167,7 @@ export const Health = z.object({
   /** Server has a key and a configured project agent. Does not probe ElevenLabs. */
   voiceConversation: z.boolean().optional(),
   db: z.boolean(),
+  storage: z.enum(["database", "memory"]).optional(),
   auth: z.boolean(),
   preview: z.boolean(),
   stamp: z.boolean(),
@@ -282,6 +283,7 @@ export const EventsRequest = z.object({
   mode: CoachMode.optional(),
   /** How the session ended. */
   outcome: z.enum(["captured", "captured-manually", "abandoned"]).optional(),
+  round: z.string().optional(),
   events: z.array(CoachEvent).max(600),
 });
 export type EventsRequest = z.infer<typeof EventsRequest>;
@@ -293,6 +295,8 @@ export const FeedbackRequest = z.object({
   appVersion: z.string(),
   rating: z.number().int().min(1).max(5),
   comment: z.string().max(500).optional(),
+  beforeTotal: pct.int().optional(),
+  afterTotal: pct.int().optional(),
   /** Label of the user-testing round, e.g. "round-1". */
   round: z.string().optional(),
 });
@@ -329,6 +333,7 @@ export const Recipe = z.object({
   lng: z.number().optional(),
   status: z.enum(["draft", "public", "hidden"]),
   uses: z.number().int().nonnegative(),
+  sample: z.boolean().optional(),
   ownerName: z.string().optional(),
   createdAt: z.string(),
 });
@@ -341,6 +346,7 @@ export const RecipeCreateRequest = Recipe.pick({
   place: true,
   lat: true,
   lng: true,
+  sample: true,
 });
 export type RecipeCreateRequest = z.infer<typeof RecipeCreateRequest>;
 
@@ -360,6 +366,7 @@ export const Stats = z.object({
     }),
   ),
   votes: z.object({ total: z.number(), preferredAfter: z.number() }),
+  storage: z.enum(["database", "memory"]).optional(),
 });
 export type Stats = z.infer<typeof Stats>;
 

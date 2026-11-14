@@ -4,7 +4,7 @@ import { POSE_POINT_NAMES } from "@/lib/contracts";
 import { templateToImage } from "./geometry";
 import { rollFromGravity } from "./level";
 import { getPoseTemplate } from "./poses/catalog";
-import { computeShotScore, cropScore } from "./score";
+import { computeShotScore, cropScore, isMeasured } from "./score";
 import type { TrackedPose } from "./tracker";
 
 const PORTRAIT = 3 / 4;
@@ -71,5 +71,25 @@ describe("computeShotScore", () => {
     expect(score.framing).toBe(0);
     expect(score.crop).toBeNull();
     expect(score.total).toBe(0);
+  });
+});
+
+describe("ideas without a person", () => {
+  it("report framing, crop and light as not measured instead of zero", () => {
+    const objectIdea = {
+      id: "o",
+      title: "o",
+      style: "detail" as const,
+      why: "o",
+      photographer: { say: "o", move: "closer" as const, height: "high" as const, orientation: "portrait" as const },
+      framing: { subjectBox: { x: 0.3, y: 0.3, w: 0.4, h: 0.4 }, levelDeg: 0 },
+      usesFromScene: ["a", "b"],
+    };
+    const score = computeShotScore({ pose: null, idea: objectIdea, mode: "friend", aspect: PORTRAIT, level: null });
+    expect(score.framing).toBeNull();
+    expect(score.pose).toBeNull();
+    expect(score.crop).toBeNull();
+    expect(score.light).toBeNull();
+    expect(isMeasured(score)).toBe(false);
   });
 });

@@ -30,7 +30,7 @@ import {
   type SpeakRequest,
   type VoteRequest,
 } from "./contracts";
-import { SAMPLE_PLAN_PERSON, sampleReview } from "./fixtures";
+import { samplePlan, sampleReview } from "./fixtures";
 
 export class ApiFailure extends Error {
   constructor(
@@ -73,6 +73,13 @@ const NOTHING_CONFIGURED: Health = {
   stamp: false,
 };
 
+export type RecipeLoadResult =
+  | { status: "ok"; recipe: Recipe }
+  | { status: "not_found" }
+  | { status: "unavailable" };
+export type RecipeListResult = { status: "ok"; recipes: Recipe[] } | { status: "unavailable" };
+export type StatsResult = { status: "ok"; stats: Stats } | { status: "unavailable" };
+
 export const api = {
   /** Which optional services the server has. Never throws. */
   async health(): Promise<Health> {
@@ -88,7 +95,7 @@ export const api = {
     try {
       return await post("/api/analyze", req, AnalyzeResponse);
     } catch {
-      return { plan: SAMPLE_PLAN_PERSON, mock: true };
+      return { plan: samplePlan(req.lang), mock: true };
     }
   },
 
@@ -206,7 +213,41 @@ export const api = {
     }
   },
 
+  async statsResult(round?: string): Promise<StatsResult> {
+    try {
+      const query = round === undefined ? "" : `?round=${encodeURIComponent(round)}`;
+      const stats = await request(`/api/stats${query}`, Stats, { cache: "no-store" });
+      return { status: "ok", stats };
+    } catch {
+      return { status: "unavailable" };
+    }
+  },
+
   recipes: {
+    async use(id: string): Promise<boolean> {
+      try {
+        return (await fetch(`/api/recipes/${encodeURIComponent(id)}/use`, { method: "POST" })).ok;
+      } catch {
+        return false;
+      }
+    },
+    async load(id: string): Promise<RecipeLoadResult> {
+      try {
+        const recipe = await request(`/api/recipes/${encodeURIComponent(id)}`, Recipe, { cache: "no-store" });
+        return { status: "ok", recipe };
+      } catch (error) {
+        if (error instanceof ApiFailure && error.status === 404 && error.code === "not_found") return { status: "not_found" };
+        return { status: "unavailable" };
+      }
+    },
+    async listResult(): Promise<RecipeListResult> {
+      try {
+        const recipes = await request("/api/recipes", Recipe.array(), { cache: "no-store" });
+        return { status: "ok", recipes };
+      } catch {
+        return { status: "unavailable" };
+      }
+    },
     /** Public recipes, nearest first when a position is given. */
     async list(near?: { lat: number; lng: number }): Promise<Recipe[]> {
       try {

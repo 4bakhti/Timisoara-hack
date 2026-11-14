@@ -7,7 +7,7 @@
  * the template), crop (no limb cut at a joint), light (the face is not much
  * darker than the rest), level (the phone was held straight).
  */
-import type { CoachMode, PosePointName, ShotIdea, ShotScore } from "@/lib/contracts";
+import type { Box, CoachMode, PosePointName, PosePoints, ShotIdea, ShotScore } from "@/lib/contracts";
 import { poseFeatures, toIsotropic, torsoFrame } from "./geometry";
 import { matchFraming, matchPose } from "./match";
 import { getPoseTemplate } from "./poses/catalog";
@@ -102,14 +102,22 @@ export interface ScoreInput {
   level: number | null;
   /** The picture itself, for the light check. Optional. */
   image?: Drawable;
+  /** Score against a target taken from an AI preview instead of the idea's template and box. */
+  target?: { points: PosePoints; box: Box };
 }
 
 export function computeShotScore(input: ScoreInput): ShotScore {
   const { pose, idea, mode, aspect } = input;
-  const template = getPoseTemplate(idea.subject?.poseTemplateId);
+  const template = input.target ? { points: input.target.points } : getPoseTemplate(idea.subject?.poseTemplateId);
+  const box = input.target?.box ?? idea.framing.subjectBox;
   const person = pose && hasTorso(pose.points) ? pose : null;
 
-  const framing = person ? (matchFraming(person.points, template.points, idea.framing.subjectBox, aspect, mode)?.score ?? 0) : 0;
+  // Without a subject the tracker has nothing to measure framing against: report it as not measured.
+  const framing = !idea.subject
+    ? null
+    : person
+      ? (matchFraming(person.points, template.points, box, aspect, mode)?.score ?? 0)
+      : 0;
 
   let poseScore: number | null = null;
   if (idea.subject && person) {
@@ -123,8 +131,8 @@ export function computeShotScore(input: ScoreInput): ShotScore {
   const parts = {
     pose: poseScore,
     framing,
-    crop: person ? cropScore(person) : null,
-    light: person && input.image ? lightScore(input.image, person) : null,
+    crop: idea.subject && person ? cropScore(person) : null,
+    light: idea.subject && person && input.image ? lightScore(input.image, person) : null,
     level: input.level,
   };
 
@@ -143,7 +151,7 @@ let stillTracker: Promise<StillTracker> | null = null;
 
 /** The shared tracker for single photos. Loaded on first use. */
 export function getStillTracker(): Promise<StillTracker> {
-  stillTracker ??= createStillTracker();
+  stillTracker ??= createStillTracker({ withMask: true });
   return stillTracker;
 }
 
@@ -161,17 +169,31 @@ function loadImage(src: string): Promise<HTMLImageElement> {
  * Scores a photo (data URL, blob URL or address) against an idea. Use it for the
  * "before" picture so it can be compared with the captured shot's score.
  * Level is unknown for a still, so it is left out of both the parts and the total.
+ * Returns null when nothing could be measured (an idea without a person), so the
+ * interface shows "not measured" instead of a misleading 0.
  */
-export async function scoreStill(src: string, idea: ShotIdea, mode: CoachMode = "friend"): Promise<ShotScore> {
+export async function scoreStill(
+  src: string,
+  idea: ShotIdea,
+  mode: CoachMode = "friend",
+  target?: { points: PosePoints; box: Box },
+): Promise<ShotScore | null> {
   const image = await loadImage(src);
   const tracker = await getStillTracker();
   const pose = tracker.detect(image);
-  return computeShotScore({
+  const score = computeShotScore({
     pose,
     idea,
     mode,
     aspect: image.naturalWidth / Math.max(1, image.naturalHeight),
     level: null,
     image,
+    target,
   });
+  return isMeasured(score) ? score : null;
+}
+
+/** true when at least one part of the score could be measured. */
+export function isMeasured(score: ShotScore): boolean {
+  return [score.pose, score.framing, score.crop, score.light, score.level].some((part) => part !== null);
 }

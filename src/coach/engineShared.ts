@@ -2,6 +2,7 @@
 import { api } from "@/lib/api";
 import { APP_VERSION } from "@/lib/brand";
 import type { CoachEvent, EventsRequest } from "@/lib/contracts";
+import { roundLabel } from "@/state/round";
 import { phraseAudience, phraseText, type PhraseId } from "./phrases";
 import type { CoachCaptureResult, CoachInstruction, CoachSpeechLine, EngineConfig } from "./types";
 import { speakInstruction, stopSpeaking } from "./voice";
@@ -58,8 +59,15 @@ export interface Recorder {
 }
 
 /** Records how a coaching session went, for the results dashboard. No images, no personal data. */
+/** The user-testing round from the address (/shoot?round=round-1), if any. */
+export function currentRound(): string | undefined {
+  if (typeof window === "undefined") return undefined;
+  return roundLabel(new URL(window.location.href).searchParams.get("round") ?? undefined);
+}
+
 export function createRecorder(cfg: Pick<EngineConfig, "idea" | "mode">): Recorder {
   const sessionId = newSessionId();
+  const round = currentRound();
   const events: CoachEvent[] = [];
   let startedAt: number | null = null;
   let lastAt = -Infinity;
@@ -80,6 +88,7 @@ export function createRecorder(cfg: Pick<EngineConfig, "idea" | "mode">): Record
         ideaStyle: cfg.idea.style,
         mode: cfg.mode,
         outcome,
+        ...(round ? { round } : {}),
         events,
       });
     },

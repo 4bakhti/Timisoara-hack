@@ -1,0 +1,17 @@
+[Unit]
+Description=Framewise (Next.js production server)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=framewise
+WorkingDirectory=/opt/framewise/app
+Environment=NODE_ENV=production
+# Listens only on this machine; Caddy serves it to the internet over HTTPS.
+ExecStart=/usr/bin/npm start -- --port 3000 --hostname 127.0.0.1
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

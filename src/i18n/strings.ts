@@ -141,6 +141,12 @@ export const STRINGS = {
   },
   pickShot: { en: "Pick a shot", ro: "Alege un cadru" },
   useShot: { en: "Use this shot", ro: "Folosește acest cadru" },
+  aiPreviewLabel: { en: "AI preview, not your photo", ro: "Previzualizare AI, nu fotografia ta" },
+  drawingPose: { en: "Drawing this pose…", ro: "Desenez această poziție…" },
+  previewsNote: {
+    en: "The previews are drawn by AI from your scene photo. Your final photo is always a real capture.",
+    ro: "Previzualizările sunt desenate de AI din fotografia scenei. Fotografia finală este mereu o captură reală.",
+  },
   photographer: { en: "Photographer", ro: "Fotograful" },
   inPhoto: { en: "In the photo", ro: "În fotografie" },
   solo: { en: "Solo", ro: "Singur" },

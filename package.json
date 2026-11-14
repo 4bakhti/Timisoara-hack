@@ -11,6 +11,7 @@
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
     "voice:clips": "node --env-file-if-exists=.env.local --import tsx scripts/generate-voice-clips.ts",
+    "db:migrate": "node --env-file-if-exists=.env.local --import tsx scripts/migrate.ts",
     "voice:check": "node --env-file-if-exists=.env.local --import tsx scripts/check-voice-agent.ts",
     "check": "npm run typecheck && npm run lint && npm run test && npm run build"
   },
