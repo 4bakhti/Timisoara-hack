@@ -48,7 +48,7 @@ function NotMeasured({ lang }: { lang: Lang }) {
   );
 }
 
-export function ShootFlow({ recipe, onExit }: { recipe?: Recipe; onExit?: () => void }) {
+export function ShootFlow({ recipe, onExit, round }: { recipe?: Recipe; onExit?: () => void; round?: string }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const pictureUrlRef = useRef<string | null>(null);
@@ -582,7 +582,7 @@ export function ShootFlow({ recipe, onExit }: { recipe?: Recipe; onExit?: () => 
           )}
 
           <div className="mt-8">
-            <FeedbackForm key={captures} lang={lang} />
+            <FeedbackForm key={captures} lang={lang} round={round} />
           </div>
         </section>
       )}

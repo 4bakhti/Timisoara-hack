@@ -42,6 +42,80 @@ export const STRINGS = {
   navStats: { en: "Results", ro: "Rezultate" },
   navLab: { en: "Lab", ro: "Laborator" },
 
+  scanToTry: { en: "Scan to try it on your phone", ro: "Scanează ca să o încerci pe telefon" },
+  scanQrAlt: { en: "QR code that opens the camera coach", ro: "Cod QR care deschide antrenorul foto" },
+  scanLocal: {
+    en: "This address only works on this computer. Open the app from its public address for a code phones can use.",
+    ro: "Această adresă funcționează doar pe acest calculator. Deschide aplicația de la adresa ei publică pentru un cod pe care îl pot folosi telefoanele.",
+  },
+  navDemo: { en: "Demo", ro: "Demonstrație" },
+
+  /* ---------------------------------------------------------------- demo */
+  demoBadge: { en: "Demo: sample data", ro: "Demonstrație: date exemplu" },
+  demoTitle: { en: "Demo", ro: "Demonstrație" },
+  demoIntro: {
+    en: "A walk through the whole flow on a drawn scene. No camera, no network and no AI: the ideas, the coaching and the review are prepared samples, not a reading of anything real.",
+    ro: "O parcurgere a întregului flux pe o scenă desenată. Fără cameră, fără rețea și fără AI: ideile, îndrumarea și analiza sunt exemple pregătite, nu citirea a ceva real.",
+  },
+  demoStart: { en: "Start the demo", ro: "Pornește demonstrația" },
+  demoRead: { en: "Show the sample ideas", ro: "Arată ideile exemplu" },
+  demoIdeasNote: {
+    en: "Prepared sample ideas. In the real app they come from reading your own scene.",
+    ro: "Idei exemplu pregătite. În aplicația reală vin din citirea scenei tale.",
+  },
+  demoCoachNote: { en: "Scripted coaching: nobody is being tracked.", ro: "Îndrumare scriptată: nu este urmărit nimeni." },
+  demoReviewNote: {
+    en: "Sample review text, prepared in advance. It does not describe these pictures.",
+    ro: "Text de analiză exemplu, pregătit dinainte. Nu descrie aceste imagini.",
+  },
+  demoPhotoNote: {
+    en: "In the demo the “photo” is a copy of the drawing. In the real app it is a real capture from your camera.",
+    ro: "În demonstrație, „fotografia” este o copie a desenului. În aplicația reală este o captură reală de la camera ta.",
+  },
+  demoNoRecipe: {
+    en: "Recipes are turned off in the demo: sample ideas are not published.",
+    ro: "Rețetele sunt dezactivate în demonstrație: ideile exemplu nu sunt publicate.",
+  },
+  demoNoFeedback: {
+    en: "Feedback is turned off in the demo, so a demo run is never counted as a real test.",
+    ro: "Părerile sunt dezactivate în demonstrație, ca o rulare demonstrativă să nu fie numărată ca un test real.",
+  },
+  demoAgain: { en: "Run the demo again", ro: "Rulează din nou demonstrația" },
+  tryReal: { en: "Try it with your camera", ro: "Încearc-o cu camera ta" },
+  watchDemo: { en: "Camera or network not working? Watch the demo", ro: "Camera sau rețeaua nu merg? Vezi demonstrația" },
+  demoSceneAlt: {
+    en: "Drawing of a person standing by a window in a room",
+    ro: "Desen cu o persoană în picioare lângă o fereastră, într-o cameră",
+  },
+
+  /* ---------------------------------------------------- voice conversation */
+  talkStart: { en: "Talk to the coach", ro: "Vorbește cu antrenorul" },
+  talkStop: { en: "Stop talking", ro: "Oprește conversația" },
+  talkConsent: {
+    en: "While this is on, your microphone audio is sent to ElevenLabs so the coach can hear you and answer. No photos are sent. Turn it off at any time.",
+    ro: "Cât timp este pornit, sunetul de la microfon este trimis la ElevenLabs, ca antrenorul să te audă și să răspundă. Nu se trimit fotografii. Îl poți opri oricând.",
+  },
+  talkAgree: { en: "Start talking", ro: "Începe conversația" },
+  talkMute: { en: "Mute mic", ro: "Oprește microfonul" },
+  talkUnmute: { en: "Unmute mic", ro: "Pornește microfonul" },
+  talkStatusDisconnected: { en: "Voice: off", ro: "Voce: oprită" },
+  talkStatusConnecting: { en: "Voice: connecting…", ro: "Voce: se conectează…" },
+  talkStatusListening: { en: "Voice: listening", ro: "Voce: ascultă" },
+  talkStatusSpeaking: { en: "Voice: speaking", ro: "Voce: vorbește" },
+  talkStatusError: { en: "Voice: not available", ro: "Voce: indisponibilă" },
+  talkReasonNotConfigured: { en: "The voice service is not set up.", ro: "Serviciul de voce nu este configurat." },
+  talkReasonMic: { en: "No microphone was found.", ro: "Nu a fost găsit niciun microfon." },
+  talkReasonDenied: {
+    en: "The microphone is blocked. Allow it in your browser settings.",
+    ro: "Microfonul este blocat. Permite-l din setările browserului.",
+  },
+  talkReasonRate: { en: "Too many attempts. Try again in a minute.", ro: "Prea multe încercări. Încearcă din nou peste un minut." },
+  talkReasonProvider: { en: "The voice service is not answering.", ro: "Serviciul de voce nu răspunde." },
+  talkReasonLost: { en: "The connection was lost.", ro: "Conexiunea s-a pierdut." },
+  talkTouchStillWorks: { en: "The buttons keep working.", ro: "Butoanele funcționează în continuare." },
+  paused: { en: "Paused", ro: "În pauză" },
+  resume: { en: "Resume", ro: "Continuă" },
+
   /* --------------------------------------------------------------- shoot */
   openCamera: { en: "Open the camera", ro: "Deschide camera" },
   usePicture: { en: "Use a picture instead", ro: "Folosește o fotografie" },
