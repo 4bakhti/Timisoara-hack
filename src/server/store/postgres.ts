@@ -1,7 +1,10 @@
 import { Pool } from "pg";
 import { Recipe, type EventsRequest, type FeedbackRequest, type Stats } from "@/lib/contracts";
-import { firstReadyMs, NO_VOTES } from "./metrics";
+import { ACTIVITY_HOURS, firstReadyMs, NO_VOTES } from "./metrics";
 import type { Position, Store, VersionStats } from "./types";
+
+type Activity = NonNullable<Stats["activity"]>;
+type ActivitySource = Exclude<Activity["source"], "memory">;
 
 /**
  * In libpq, and in the address Tiger Data gives out, sslmode=require means
@@ -52,6 +55,7 @@ function recipeFromRow(row: Record<string, unknown>) {
 export class PostgresStore implements Store {
   readonly mode = "database" as const;
   private pool?: Pool;
+  private activitySource?: Promise<ActivitySource>;
 
   constructor(private readonly connectionString: string) {}
 
@@ -98,7 +102,46 @@ export class PostgresStore implements Store {
       request.beforeTotal, request.afterTotal]);
   }
 
+  /** The hourly rollup exists only where migration 0003 could create it (TimescaleDB). Checked once. */
+  private sourceOfActivity(): Promise<ActivitySource> {
+    if (!this.activitySource) {
+      const found = this.db
+        .query<{ view: string | null }>("SELECT to_regclass('coach_activity_hourly')::text AS view")
+        .then(({ rows }): ActivitySource => (rows[0]?.view ? "continuous_aggregate" : "events"));
+      // A failed check is not remembered, so the next request asks again.
+      found.catch(() => { this.activitySource = undefined; });
+      this.activitySource = found;
+    }
+    return this.activitySource;
+  }
+
+  private async activity(round?: string): Promise<Activity> {
+    const source = await this.sourceOfActivity();
+    // One row per session and hour, from the continuous aggregate or straight from the samples.
+    const perSession = source === "continuous_aggregate"
+      ? `SELECT bucket, session_id, samples, score_sum, fps_sum, fps_samples
+         FROM coach_activity_hourly WHERE bucket >= now() - make_interval(hours => $2)`
+      : `SELECT date_trunc('hour', recorded_at, 'UTC') AS bucket, session_id, count(*) AS samples,
+           sum(score) AS score_sum, sum(fps) AS fps_sum, count(fps) AS fps_samples
+         FROM coach_events WHERE recorded_at >= now() - make_interval(hours => $2) GROUP BY 1, 2`;
+    const { rows } = await this.db.query<{ start: Date } & Omit<Activity["hours"][number], "start">>(`
+      WITH per_session AS (${perSession})
+      SELECT p.bucket AS start, count(*)::int AS sessions, sum(p.samples)::int AS samples,
+        (sum(p.score_sum) / nullif(sum(p.samples), 0))::float8 AS "avgScore",
+        (sum(p.fps_sum) / nullif(sum(p.fps_samples), 0))::float8 AS "avgFps"
+      FROM per_session p JOIN coach_sessions s USING (session_id)
+      WHERE ($1::text IS NULL OR s.round = $1)
+      GROUP BY p.bucket ORDER BY p.bucket
+    `, [round ?? null, ACTIVITY_HOURS]);
+    return { source, hours: rows.map((row) => ({ ...row, start: new Date(row.start).toISOString() })) };
+  }
+
   async stats(round?: string): Promise<Stats> {
+    const [versions, activity] = await Promise.all([this.versionStats(round), this.activity(round)]);
+    return { versions, votes: NO_VOTES, storage: this.mode, activity };
+  }
+
+  private async versionStats(round?: string): Promise<VersionStats[]> {
     const { rows } = await this.db.query<VersionStats>(`
       WITH sessions AS (
         SELECT app_version, count(*)::float8 AS sessions,
@@ -116,7 +159,7 @@ export class PostgresStore implements Store {
       FROM sessions s FULL JOIN ratings r USING (app_version)
       ORDER BY app_version DESC
     `, [round]);
-    return { versions: rows, votes: NO_VOTES, storage: this.mode };
+    return rows;
   }
 
   async insertRecipe(recipe: Recipe) {

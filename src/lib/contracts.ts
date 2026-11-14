@@ -367,6 +367,28 @@ export const Stats = z.object({
   ),
   votes: z.object({ total: z.number(), preferredAfter: z.number() }),
   storage: z.enum(["database", "memory"]).optional(),
+  /**
+   * Live coaching per hour over the last 48 hours, one entry per hour that has samples.
+   * source: "continuous_aggregate" = TimescaleDB's hourly rollup on Tiger Data,
+   * "events" = computed from the event table, "memory" = temporary demo storage.
+   */
+  activity: z
+    .object({
+      source: z.enum(["continuous_aggregate", "events", "memory"]),
+      hours: z.array(
+        z.object({
+          /** Start of the hour, ISO 8601 in UTC. */
+          start: z.string(),
+          sessions: z.number(),
+          samples: z.number(),
+          /** Mean live match score over the hour's samples. */
+          avgScore: z.number().nullable(),
+          /** Mean frame rate over the samples that report one. */
+          avgFps: z.number().nullable(),
+        }),
+      ),
+    })
+    .optional(),
 });
 export type Stats = z.infer<typeof Stats>;
 

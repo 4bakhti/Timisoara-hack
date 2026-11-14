@@ -1,9 +1,12 @@
 import type { EventsRequest, FeedbackRequest, Recipe, Stats } from "@/lib/contracts";
-import { firstReadyMs, NO_VOTES } from "./metrics";
+import { ACTIVITY_HOURS, firstReadyMs, NO_VOTES, ratio } from "./metrics";
 import type { Position, Store, VersionStats } from "./types";
 
 const DEFAULT_LIMITS = { sessions: 2000, feedback: 5000, recipes: 500 };
-type Session = Pick<EventsRequest, "appVersion" | "outcome" | "round"> & { readyMs: number | null };
+const HOUR_MS = 3_600_000;
+/** Per-session sums of the live samples, like one row of the database's hourly rollup. */
+type Samples = { hour: number; samples: number; scoreSum: number; fpsSum: number; fpsSamples: number };
+type Session = Pick<EventsRequest, "appVersion" | "outcome" | "round"> & { readyMs: number | null } & Samples;
 type Bucket = {
   sessions: number;
   captured: number;
@@ -44,13 +47,48 @@ export class MemoryStore implements Store {
   private readonly feedback = new Map<string, FeedbackRequest>();
   private readonly recipes = new Map<string, Recipe>();
 
-  constructor(private readonly limits = DEFAULT_LIMITS) {}
+  constructor(private readonly limits = DEFAULT_LIMITS, private readonly now: () => number = Date.now) {}
 
   async recordEvents(request: EventsRequest) {
     if (this.sessions.has(request.sessionId)) return;
     const { appVersion, outcome, round, events } = request;
+    const samples: Samples = { hour: Math.floor(this.now() / HOUR_MS) * HOUR_MS, samples: events.length, scoreSum: 0, fpsSum: 0, fpsSamples: 0 };
+    for (const event of events) {
+      samples.scoreSum += event.score;
+      if (event.fps !== undefined) {
+        samples.fpsSum += event.fps;
+        samples.fpsSamples++;
+      }
+    }
     // Keep summaries only in demo storage. Raw events are available in Postgres.
-    put(this.sessions, request.sessionId, { appVersion, outcome, round, readyMs: firstReadyMs(events) }, this.limits.sessions);
+    put(this.sessions, request.sessionId, { appVersion, outcome, round, readyMs: firstReadyMs(events), ...samples }, this.limits.sessions);
+  }
+
+  private activity(round?: string): NonNullable<Stats["activity"]> {
+    const since = this.now() - ACTIVITY_HOURS * HOUR_MS;
+    const hours = new Map<number, Omit<Samples, "hour"> & { sessions: number }>();
+    for (const session of this.sessions.values()) {
+      if (session.samples === 0 || session.hour < since || (round !== undefined && session.round !== round)) continue;
+      const entry = hours.get(session.hour) ?? { sessions: 0, samples: 0, scoreSum: 0, fpsSum: 0, fpsSamples: 0 };
+      entry.sessions++;
+      entry.samples += session.samples;
+      entry.scoreSum += session.scoreSum;
+      entry.fpsSum += session.fpsSum;
+      entry.fpsSamples += session.fpsSamples;
+      hours.set(session.hour, entry);
+    }
+    return {
+      source: "memory",
+      hours: [...hours]
+        .sort(([a], [b]) => a - b)
+        .map(([hour, entry]) => ({
+          start: new Date(hour).toISOString(),
+          sessions: entry.sessions,
+          samples: entry.samples,
+          avgScore: ratio(entry.scoreSum, entry.samples),
+          avgFps: ratio(entry.fpsSum, entry.fpsSamples),
+        })),
+    };
   }
 
   async saveFeedback(request: FeedbackRequest) {
@@ -94,7 +132,7 @@ export class MemoryStore implements Store {
       ratings: entry.ratings.length,
     }));
     versions.sort((a, b) => b.appVersion.localeCompare(a.appVersion));
-    return { versions, votes: NO_VOTES, storage: this.mode };
+    return { versions, votes: NO_VOTES, storage: this.mode, activity: this.activity(round) };
   }
 
   async insertRecipe(recipe: Recipe) {

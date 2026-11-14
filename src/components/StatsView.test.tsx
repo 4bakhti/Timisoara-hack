@@ -67,6 +67,26 @@ describe("StatsView", () => {
     expect(screen.getByText("Version 0.1.0")).toBeTruthy();
   });
 
+  it("shows coaching per hour from the continuous aggregate, with a table and where it came from", async () => {
+    const hour = new Date(Math.floor(Date.now() / 3_600_000) * 3_600_000).toISOString();
+    stats.mockResolvedValue({
+      ...TEST_STATS,
+      activity: { source: "continuous_aggregate", hours: [{ start: hour, sessions: 3, samples: 90, avgScore: 71.6, avgFps: 23.8 }] },
+    });
+    render(<StatsView />);
+    const chart = within(await screen.findByRole("region", { name: t("activityTitle", "en") }));
+    expect(chart.getByText(/3 sessions · average live score 72 · 24 frames per second$/)).toBeTruthy();
+    expect(chart.getByText(t("activitySourceCagg", "en"))).toBeTruthy();
+    expect(chart.getByRole("table", { hidden: true })).toBeTruthy();
+  });
+
+  it("leaves the hourly chart out when the answer has no activity", async () => {
+    stats.mockResolvedValue(TEST_STATS);
+    render(<StatsView />);
+    await screen.findByRole("region", { name: "Version 0.1.0" });
+    expect(state("activity")).toBeNull();
+  });
+
   it("shows the recorded numbers as they are", async () => {
     stats.mockResolvedValue(TEST_STATS);
     render(<StatsView />);

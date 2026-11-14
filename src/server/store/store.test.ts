@@ -80,6 +80,33 @@ function storeBehavior(makeStore: () => Promise<Store>) {
     for (const item of [far, missing, near]) await store.insertRecipe(item);
     expect((await store.listRecipes({ lat: 45.75, lng: 21.23 })).map(item => item.id)).toEqual([near.id, far.id, missing.id]);
   });
+
+  it("rolls live samples up by hour and round, weighting averages by samples", async () => {
+    const samples = (sessionId: string, round: string, events: { t: number; score: number; fps?: number }[]) =>
+      store.recordEvents({ sessionId, appVersion: "v1", round, events });
+    await samples("a", "round-1", [{ t: 0, score: 40, fps: 20 }, { t: 500, score: 60, fps: 24 }, { t: 1000, score: 80 }]);
+    await samples("b", "round-2", [{ t: 0, score: 90, fps: 30 }]);
+    await samples("c", "round-2", []);
+
+    // Totals over the returned hours, so a run that crosses an hour boundary still checks out.
+    const totals = (hours: NonNullable<Awaited<ReturnType<Store["stats"]>>["activity"]>["hours"]) => {
+      const samplesSum = hours.reduce((sum, hour) => sum + hour.samples, 0);
+      return {
+        sessions: hours.reduce((sum, hour) => sum + hour.sessions, 0),
+        samples: samplesSum,
+        avgScore: hours.reduce((sum, hour) => sum + (hour.avgScore ?? 0) * hour.samples, 0) / samplesSum,
+      };
+    };
+    const all = Stats.parse(await store.stats()).activity!;
+    expect(["continuous_aggregate", "events", "memory"]).toContain(all.source);
+    expect(totals(all.hours)).toEqual({ sessions: 2, samples: 4, avgScore: 67.5 });
+    expect(all.hours.every((hour) => hour.start.endsWith(":00:00.000Z"))).toBe(true);
+
+    const second = (await store.stats("round-2")).activity!.hours;
+    expect(totals(second)).toEqual({ sessions: 1, samples: 1, avgScore: 90 });
+    expect(second.find((hour) => hour.samples > 0)?.avgFps).toBe(30);
+    expect((await store.stats("missing")).activity!.hours).toEqual([]);
+  });
 }
 
 describe("withLibpqSslMode", () => {
@@ -103,6 +130,17 @@ describe("withLibpqSslMode", () => {
 
 describe("MemoryStore", () => {
   storeBehavior(async () => new MemoryStore());
+  it("keeps the hour-by-hour activity to the last 48 hours", async () => {
+    let now = Date.UTC(2026, 10, 14, 18, 20);
+    const store = new MemoryStore(undefined, () => now);
+    await store.recordEvents({ sessionId: "early", appVersion: "v1", events: [{ t: 0, score: 50, fps: 25 }] });
+    expect((await store.stats()).activity).toEqual({
+      source: "memory",
+      hours: [{ start: "2026-11-14T18:00:00.000Z", sessions: 1, samples: 1, avgScore: 50, avgFps: 25 }],
+    });
+    now += 49 * 3_600_000;
+    expect((await store.stats()).activity?.hours).toEqual([]);
+  });
   it("bounds sessions, feedback and recipes by evicting the oldest entries", async () => {
     const store = new MemoryStore({ sessions: 1, feedback: 1, recipes: 1 });
     for (const id of ["one", "two"]) {
@@ -168,5 +206,10 @@ describe.skipIf(!databaseUrl)("PostgresStore (explicit TEST_DATABASE_URL)", () =
     await first.close();
     const second = new PostgresStore(connectionString);
     try { expect(await second.getRecipe(item.id)).toEqual(item); } finally { await second.close(); }
+  });
+  it("reads the activity from the TimescaleDB rollup wherever the extension is installed", async () => {
+    const { rows } = await pool.query("SELECT 1 FROM pg_extension WHERE extname = 'timescaledb'");
+    const store = new PostgresStore(connectionString); stores.push(store);
+    expect((await store.stats()).activity?.source).toBe(rows.length ? "continuous_aggregate" : "events");
   });
 });

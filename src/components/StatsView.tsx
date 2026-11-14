@@ -9,6 +9,7 @@
  * and nothing is filled in to make the page look better.
  */
 import type { ReactNode } from "react";
+import { ActivityChart } from "@/components/ActivityChart";
 import { ScreenHeader } from "@/components/ScreenHeader";
 import { card, notice, secondary } from "@/components/styles";
 import { formatNumber, t, tf } from "@/i18n/strings";
@@ -123,6 +124,10 @@ export function StatsView() {
                   <VersionCard key={version.appVersion} version={version} lang={lang} />
                 ))}
               </div>
+
+              {stats.activity && (
+                <ActivityChart key={stats.activity.hours.at(-1)?.start ?? "none"} activity={stats.activity} lang={lang} />
+              )}
 
               <section className={card}>
                 <h2 className="text-lg font-semibold">{t("votesTitle", lang)}</h2>
