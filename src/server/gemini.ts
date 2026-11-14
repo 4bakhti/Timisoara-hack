@@ -7,6 +7,7 @@
  */
 import { GoogleGenAI } from "@google/genai";
 import { z, type ZodType } from "zod";
+import { classifyImageError, type ImageFailure } from "./preview";
 
 let client: GoogleGenAI | null = null;
 let clientKey: string | null = null;
@@ -105,4 +106,44 @@ export async function generateJson<T>(apiKey: string, call: JsonCall<T>): Promis
     }
   }
   return null;
+}
+
+export interface ImageCall {
+  model: string;
+  text: string;
+  /** The photo to edit, as a data URL. */
+  image: string;
+  /** One of the model's supported ratios, e.g. "3:4", to keep the photo's shape. */
+  aspectRatio?: string;
+  timeoutMs: number;
+}
+
+export type ImageResult =
+  | { ok: true; dataUrl: string }
+  | { ok: false; reason: ImageFailure | "invalid_image" | "no_image" };
+
+/** Asks an image model to edit a photo and returns the picture it made. */
+export async function generateImage(apiKey: string, call: ImageCall): Promise<ImageResult> {
+  const input = splitDataUrl(call.image);
+  if (!input) return { ok: false, reason: "invalid_image" };
+  try {
+    const response = await getClient(apiKey).models.generateContent({
+      model: call.model,
+      contents: [{ role: "user", parts: [{ inlineData: input }, { text: call.text }] }],
+      config: {
+        responseModalities: ["IMAGE"],
+        ...(call.aspectRatio ? { imageConfig: { aspectRatio: call.aspectRatio } } : {}),
+        abortSignal: AbortSignal.timeout(call.timeoutMs),
+      },
+    });
+    const part = response.candidates?.[0]?.content?.parts?.find((p) => p.inlineData?.data);
+    const data = part?.inlineData?.data;
+    if (!data) return { ok: false, reason: "no_image" };
+    return { ok: true, dataUrl: `data:${part?.inlineData?.mimeType ?? "image/png"};base64,${data}` };
+  } catch (error) {
+    const reason = classifyImageError(error);
+    // Only the outcome is logged: the request holds the user's photo.
+    console.error(`[gemini] ${call.model} image request failed: ${reason}`);
+    return { ok: false, reason };
+  }
 }
