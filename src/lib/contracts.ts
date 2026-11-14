@@ -167,6 +167,7 @@ export const Health = z.object({
   /** Server has a key and a configured project agent. Does not probe ElevenLabs. */
   voiceConversation: z.boolean().optional(),
   db: z.boolean(),
+  storage: z.enum(["database", "memory"]).optional(),
   auth: z.boolean(),
   preview: z.boolean(),
   stamp: z.boolean(),
