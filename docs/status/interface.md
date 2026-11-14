@@ -2,7 +2,7 @@
 
 Updated: Sat 14 Nov, 11:00
 
-Branch: `claude-2/interface-extras`, from `main` at `0439c62`. Pull request: into `main`, not merged (see the PR for the link). Not deployed.
+Branch: `claude-2/interface-extras`, from `main` at `0439c62`. Pull request: https://github.com/4bakhti/Timisoara-hack/pull/2 into `main`, not merged. Not deployed.
 
 ## Routes
 
