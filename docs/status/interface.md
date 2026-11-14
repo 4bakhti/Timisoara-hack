@@ -1,40 +1,36 @@
 # Interface: status
 
-Updated: Sat 14 Nov, 02:45
+Updated: Sat 14 Nov, 05:45 — work in progress, handoff not finished (see "Not done").
 
-A first version of the main flow was written by the vision workstream so the product works end to end. Whoever picks up the interface workstream owns these files from here and continues with the list under "Next".
+Branch: `claude-2/interface-extras` (local commit only; **not pushed, no PR yet**).
 
-## Done
-- `/` home page explaining the four steps, with a Start button.
-- `/shoot` (`src/components/ShootFlow.tsx`): the whole flow on one screen with a single `<video>` kept alive:
-  intro → camera → reading the scene → three idea cards → live coaching → result.
-  - Camera start in one tap (also unlocks sound and the tilt sensor, keeps the screen awake); front/rear switch with mirrored preview.
-  - Without a camera: "Use a picture instead" runs the same flow on a picture.
-  - Idea cards with a framing diagram (target box and pose figure), "Sample suggestions" label when the data is sample data.
-  - Coaching screen: score ring, one large instruction (`aria-live`), countdown, friend/solo switch, voice switch, shutter.
-  - Result: before and after with totals and parts, what improved, a lesson, save or share, try another idea, new scene, 1–5 rating.
-- English and Romanian for every string (`src/i18n/strings.ts`), language switch.
-- Dark theme, safe-area padding, reduced-motion support.
+## Done on this branch
+- `/shoot`: fixes only, same architecture and tracker. A failed camera switch returns to the first screen with the reason; double taps on "Read my scene" start one reading; unreadable pictures show a message; Back from the camera step releases the camera; the picture's object URL is released; unmeasured values show as "–" with "not measured" for screen readers, never 0; sample ideas and sample review text are labelled more plainly.
+- Feedback (`FeedbackForm`): rating, optional comment, sending state, one request per tap, retry with the same session code. "Saved" appears only when `api.feedback` returns true; otherwise "not saved".
+- Recipes: `RecipePublisher` (preview, explicit publish, optional place and position, no photo sent), `/recipes` list, `/r/[id]` detail with link + QR, recreate through `ShootFlow` with a `recipe` prop (camera still starts from its own button; photos are compared only on request).
+- `/stats` (`StatsView`): separate unavailable, empty and temporary-storage states; unmeasured values shown as "Not measured".
+- Shared language choice (`src/state/lang.ts`), bilingual home page, 44 px touch targets, visible focus outline.
 
-Checked in a desktop browser at phone size, using a picture instead of the camera: all six steps work on sample data with the real tracker.
+## Checks actually run
+- Baseline on untouched `main`: `npm run check` passed (53 tests).
+- This branch: `npx vitest run` → 96 passed (53 old + 43 new). `typecheck` and `lint` passed before the test files were added. **A full `npm run check` was started but its result was not read before this file was written.**
+- Browser (desktop pane at 375×812, picture upload, not a phone): camera refusal message; upload → ideas → coach → result; feedback against the missing route says "not saved" (one request on a double tap); publish against the missing route says "Not published" with no link (one request); `/stats`, `/recipes`, `/r/<unknown>` show their unavailable states. Backend for feedback, recipes and stats: **unavailable (404)**.
 
-## Not checked
-- A real phone camera. Needs a deployed HTTPS address.
+## Not done
+- Browser walk of the success paths (published link, QR, recreate), Romanian pass, landscape/desktop pass.
+- No real phone, no deployed address, no live camera, voice or outline check.
+- Push and PR.
 
-## Next
-1. App icon and web manifest (original artwork).
-2. Recipes: make one from a result, list and map, QR code, `/r/[id]` deep link.
-3. Blind vote page and results page (need the server's feedback and stats routes).
-4. Sign-in screens once the server has sign-in.
-5. Onboarding cards, privacy page, about page with credits.
-6. Demo mode with the scripted tracker (`engine: "sim"`).
-7. Accessibility and performance pass on real phones; Romanian text check by a native speaker.
+## Findings for the server workstream
+- With a real `GEMINI_API_KEY`, `POST /api/analyze` on the default `gemini-4-hydrogen` was aborted at its 14 s limit in 2 of 2 tries and fell back to sample data. `POST /api/review` answered for real in about 12 s. With `GEMINI_MODEL=gemini-3.5-flash-lite` set locally, analyze answered for real in about 4 s. Raise the limit or change the default model.
+- `npm install` adds `"hasInstallScript": true` to `package-lock.json`; not committed here.
 
-## Needs from the team
-- Try `/shoot` on an iPhone and an Android phone and write down anything that looks wrong or confusing.
+## Requests to the server workstream (additive)
+- `api.feedback`, `api.recipes.list`, `api.recipes.get` and `api.stats` hide why they failed. Let callers tell "missing or failed" from "empty" or "not found".
+- Say whether storage is temporary in the feedback, recipe and stats answers. Until then the interface infers it from `health.db === false`.
+- `Recipe` has no field for sample data, so the interface refuses to publish sample ideas.
+- Routes still needed: `/api/feedback`, `/api/recipes`, `/api/recipes/[id]`, `/api/stats`, `/api/events`.
 
-## Requests to other workstreams
-- Server: feedback, events, pairs, votes and stats routes.
-
-## Notes for other workstreams
-- Screens reach the server only through `src/lib/api.ts`.
+## Notes
+- `APP_VERSION` was not changed (`src/lib/brand.ts` is not an interface file); bump it if results should be compared across this change.
+- Component tests use `// @vitest-environment jsdom` per file; no config or dependency change.
