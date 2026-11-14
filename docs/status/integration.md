@@ -22,7 +22,7 @@ Updated: Sat 14 Nov, 14:45. `main` at the commit that adds this file.
 |---|---|
 | Shared hookups (`src/vision/types.ts`, wiring in `poseEngine`, `/lab/live` readout) | Merged `bdc5826`, `17f08cd` |
 | **A — tracker and drawing** (`vision/a-tracker-outline`) | **Merged `03f5012`** |
-| B — AI pose previews (`vision/b-ai-previews`) | In progress |
+| **B — AI pose previews** (`vision/b-ai-previews`) | **Merged `a75eac9`** |
 | C — face and 3D coaching (`vision/c-face-3d`) | In progress |
 
 What A changed, for B and C:
@@ -32,6 +32,12 @@ What A changed, for B and C:
 - Phones start on the lite pose model and upgrade to full when detection stays under 18 ms a frame (back to lite above 40 ms). `/lab/live` shows which one runs.
 - Drawing: the target is a body shape with a dashed outline (the preview's real outline when `target.silhouette` is set); the live person gets a glowing outline; the corrected limb turns red; everything turns green only while the coach holds or counts down.
 - Checked in a desktop browser on a single picture (outline, figure, colours). **Not yet checked on a real phone or live camera.**
+
+What B added:
+- `POST /api/preview`: the scene photo and an idea in, an AI preview of the same person in that pose out (default model `gemini-3.1-flash-lite-image`, Nano Banana 2 Lite; `GEMINI_IMAGE_MODEL` overrides). It keeps the photo's aspect ratio and pauses previews for ten minutes when the account has no image quota.
+- Idea cards show the three previews ("AI preview, not your photo") after a real reading; choosing one coaches toward that preview's pose, box and outline (`targetFromPreview`, fitted to the camera frame's shape). The "before" picture is scored against the same target.
+- Verified: route validation and fallbacks (tests); the full screen flow in a desktop browser with **real Gemini scene reading** and a **stand-in preview photo** returned in place of `/api/preview`.
+- **Not verified: a real generated preview.** The current key answered "429 quota exceeded" for both image models (text models work). Image generation needs billing / image quota on the key's Google account.
 
 ## Checks
 
