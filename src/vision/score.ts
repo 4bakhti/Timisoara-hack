@@ -197,3 +197,32 @@ export async function scoreStill(
 export function isMeasured(score: ShotScore): boolean {
   return [score.pose, score.framing, score.crop, score.light, score.level].some((part) => part !== null);
 }
+
+/**
+ * The before and after scores with both totals taken over only the parts that
+ * both pictures measured. The "before" picture never has the phone's tilt, so
+ * comparing the plain totals would favour the captured shot. The parts are left
+ * as they are, and the scores come back unchanged when both measured the same
+ * parts. null when the two pictures share no measured part.
+ */
+export function comparableScores(before: ShotScore, after: ShotScore): { before: ShotScore; after: ShotScore } | null {
+  let weights = 0;
+  let beforeSum = 0;
+  let afterSum = 0;
+  let sameParts = true;
+  for (const key of Object.keys(WEIGHTS) as (keyof typeof WEIGHTS)[]) {
+    const b = before[key];
+    const a = after[key];
+    if ((b === null) !== (a === null)) sameParts = false;
+    if (b === null || a === null) continue;
+    weights += WEIGHTS[key];
+    beforeSum += WEIGHTS[key] * b;
+    afterSum += WEIGHTS[key] * a;
+  }
+  if (!weights) return null;
+  if (sameParts) return { before, after };
+  return {
+    before: { ...before, total: Math.round(beforeSum / weights) },
+    after: { ...after, total: Math.round(afterSum / weights) },
+  };
+}

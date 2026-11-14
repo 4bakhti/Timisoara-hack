@@ -4,7 +4,7 @@ import { POSE_POINT_NAMES } from "@/lib/contracts";
 import { templateToImage } from "./geometry";
 import { rollFromGravity } from "./level";
 import { getPoseTemplate } from "./poses/catalog";
-import { computeShotScore, cropScore, isMeasured } from "./score";
+import { comparableScores, computeShotScore, cropScore, isMeasured } from "./score";
 import type { TrackedPose } from "./tracker";
 
 const PORTRAIT = 3 / 4;
@@ -91,5 +91,27 @@ describe("ideas without a person", () => {
     expect(score.crop).toBeNull();
     expect(score.light).toBeNull();
     expect(isMeasured(score)).toBe(false);
+  });
+});
+
+describe("comparableScores", () => {
+  const before = { total: 70, pose: 70, framing: 70, crop: null, light: null, level: null };
+  // The captured shot also knows the phone's tilt, which lifts its plain total from 70 to 74.
+  const shot = { total: 74, pose: 70, framing: 70, crop: null, light: null, level: 100 };
+
+  it("compares totals over only the parts both pictures measured, and keeps the parts", () => {
+    const result = comparableScores(before, shot)!;
+    expect(result.before.total).toBe(70);
+    expect(result.after.total).toBe(70);
+    expect(result.after.level).toBe(100);
+  });
+
+  it("leaves the totals alone when both pictures measured the same parts", () => {
+    const steady = { ...shot, level: null, total: 81 };
+    expect(comparableScores(before, steady)).toEqual({ before, after: steady });
+  });
+
+  it("returns null when the two pictures share no measured part", () => {
+    expect(comparableScores({ ...before, pose: null, framing: null }, shot)).toBeNull();
   });
 });

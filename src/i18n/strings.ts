@@ -193,6 +193,10 @@ export const STRINGS = {
     en: "The score shows how closely a photo follows the chosen idea's pose and framing. It does not say how good the photo is.",
     ro: "Scorul arată cât de aproape este fotografia de poziția și încadrarea ideii alese. Nu spune cât de bună este fotografia.",
   },
+  sameMeasuresNote: {
+    en: "Both totals count only what was measured in both photos.",
+    ro: "Ambele totaluri iau în calcul doar ce s-a măsurat în ambele fotografii.",
+  },
   scoring: { en: "Scoring…", ro: "Calculez…" },
   comparing: { en: "Comparing your two photos…", ro: "Compar cele două fotografii…" },
   improved: { en: "What improved", ro: "Ce s-a îmbunătățit" },

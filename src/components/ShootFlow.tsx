@@ -37,7 +37,7 @@ import { APP_NAME, APP_TAGLINE } from "@/lib/brand";
 import type { CoachMode, Lang, Recipe, ReviewResponse, ShotIdea, ShotPlan, ShotScore } from "@/lib/contracts";
 import { SAMPLE_PLAN_PERSON, sampleReview } from "@/lib/fixtures";
 import { useLang } from "@/state/lang";
-import { grabFrame, requestMotionPermission, scoreStill, shrinkImage, targetFromPreview, pictureAspect, type CustomTarget } from "@/vision";
+import { comparableScores, grabFrame, requestMotionPermission, scoreStill, shrinkImage, targetFromPreview, pictureAspect, type CustomTarget } from "@/vision";
 import { useVoiceDirector, type VoiceActions, type VoiceContext, type VoiceDirector, type VoiceDirectorState } from "@/voice";
 
 type Step = "intro" | "camera" | "reading" | "ideas" | "coach" | "result";
@@ -163,7 +163,8 @@ function FlowCore({ recipe, onExit, round, demo = false, talk }: ShootFlowProps 
       before: beforeImage,
       after: captured.dataUrl,
       idea: chosen,
-      scores: { before: scored ?? UNSCORED, after: captured.score },
+      // Same measured parts on both sides, so the review is not told about a gain that is only the phone's tilt.
+      scores: (scored && comparableScores(scored, captured.score)) || { before: scored ?? UNSCORED, after: captured.score },
       lang,
     });
     if (runRef.current !== run) return;
@@ -558,6 +559,11 @@ function FlowCore({ recipe, onExit, round, demo = false, talk }: ShootFlowProps 
     </p>
   );
 
+  /** Before and after totals over the same measured parts (null until both are known, or when nothing is shared). */
+  const compared = shot && beforeScored && beforeScore ? comparableScores(beforeScore, shot.score) : null;
+  const totalsAdjusted =
+    compared !== null && (compared.before.total !== beforeScore?.total || compared.after.total !== shot?.score.total);
+
   return (
     <main className="relative mx-auto h-dvh w-full max-w-lg overflow-hidden bg-black text-white landscape:max-w-none lg:max-w-none">
       <video ref={videoRef} playsInline muted className={`absolute inset-0 h-full w-full object-cover ${flipClass}`} />
@@ -781,8 +787,8 @@ function FlowCore({ recipe, onExit, round, demo = false, talk }: ShootFlowProps 
 
           <div className="grid grid-cols-2 gap-3">
             {[
-              { label: t("before", lang), src: before, score: beforeScore, pending: !beforeScored },
-              { label: t("after", lang), src: shot.dataUrl, score: shot.score, pending: false },
+              { label: t("before", lang), src: before, score: compared?.before ?? beforeScore, pending: !beforeScored },
+              { label: t("after", lang), src: shot.dataUrl, score: compared?.after ?? shot.score, pending: false },
             ].map((side) => (
               <figure key={side.label}>
                 {side.src && (
@@ -816,6 +822,7 @@ function FlowCore({ recipe, onExit, round, demo = false, talk }: ShootFlowProps 
           <p className="mt-2 text-xs leading-snug text-neutral-400">
             <span aria-hidden="true">{t("notMeasuredKey", lang)}. </span>
             {t("scoreNote", lang)}
+            {totalsAdjusted && <> {t("sameMeasuresNote", lang)}</>}
           </p>
 
           <div className={`mt-4 ${card}`}>
@@ -901,8 +908,8 @@ function FlowCore({ recipe, onExit, round, demo = false, talk }: ShootFlowProps 
                   key={captures}
                   lang={lang}
                   round={round}
-                  beforeTotal={beforeScored ? (beforeScore?.total ?? null) : null}
-                  afterTotal={shot.score.total}
+                  beforeTotal={compared ? compared.before.total : null}
+                  afterTotal={compared ? compared.after.total : shot.score.total}
                 />
               </div>
             </>
