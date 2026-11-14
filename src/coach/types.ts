@@ -39,6 +39,8 @@ export interface CoachDebug {
   headYawDeg: number | null;
   headPitchDeg: number | null;
   silhouette: boolean;
+  /** Share of the frame covered by the person mask, 0–100 (null without a mask). */
+  outlineCoverage?: number | null;
 }
 
 export interface CoachState {

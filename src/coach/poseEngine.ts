@@ -24,6 +24,7 @@ import {
   type TrackedPose,
 } from "@/vision";
 import { getStillTracker } from "@/vision/score";
+import { maskCoverage } from "@/vision/silhouette";
 import type { PoseTracker } from "@/vision/tracker";
 import { CoachBrain, levelScore } from "./brain";
 import { limbForPhrase } from "./limbs";
@@ -36,6 +37,8 @@ const KEEP_MISSING_MS = 250;
 /** Face tracking only runs near a match, every other frame, to save the phone's power. */
 const FACE_FROM_SCORE = 70;
 const FACE_KEEP_MS = 600;
+/** Below this frame rate the silhouette glow is skipped and only the skeleton is drawn. */
+const MIN_FPS_FOR_OUTLINE = 18;
 
 export function createPoseEngine(cfg: EngineConfig): Engine {
   // A target taken from an AI preview replaces the template and the planner's box.
@@ -85,7 +88,13 @@ export function createPoseEngine(cfg: EngineConfig): Engine {
     return next;
   };
 
-  const draw = (points: LivePoints | null, score: number, pose: TrackedPose | null = null, highlight: ReturnType<typeof limbForPhrase>[] = []) => {
+  const draw = (
+    points: LivePoints | null,
+    score: number,
+    pose: TrackedPose | null = null,
+    highlight: ReturnType<typeof limbForPhrase>[] = [],
+    matched = false,
+  ) => {
     const canvas = cfg.overlay;
     const ctx = canvas?.getContext("2d");
     if (!canvas || !ctx) return;
@@ -98,9 +107,10 @@ export function createPoseEngine(cfg: EngineConfig): Engine {
       live: points ?? undefined,
       score,
       levelErrorDeg: cfg.mode === "friend" ? levelError : undefined,
-      silhouette: points ? pose?.mask : undefined,
+      silhouette: points && (!isVideo || fps >= MIN_FPS_FOR_OUTLINE) ? pose?.mask : undefined,
       targetSilhouette: cfg.target?.silhouette,
       highlight: highlight.filter((limb): limb is NonNullable<typeof limb> => limb !== null),
+      matched,
     });
   };
 
@@ -230,6 +240,7 @@ export function createPoseEngine(cfg: EngineConfig): Engine {
         headYawDeg: roundTo(face?.yawDeg, 0),
         headPitchDeg: roundTo(face?.pitchDeg, 0),
         silhouette: Boolean(pose?.mask),
+        outlineCoverage: pose?.mask ? Math.round(maskCoverage(pose.mask) * 100) : null,
       },
     });
     if (decision.speak) {
@@ -244,7 +255,8 @@ export function createPoseEngine(cfg: EngineConfig): Engine {
       fps: Math.round(fps),
     });
     const highlight = decision.phase === "coaching" ? [limbForPhrase(decision.instruction)] : [];
-    draw(visible ? points : null, decision.score, pose, highlight);
+    const matched = decision.phase === "holding" || decision.phase === "countdown";
+    draw(visible ? points : null, decision.score, pose, highlight, matched);
   };
 
   const boot = async () => {
