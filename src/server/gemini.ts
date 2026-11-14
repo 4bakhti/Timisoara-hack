@@ -75,9 +75,12 @@ export async function generateJson<T>(apiKey: string, call: JsonCall<T>): Promis
       const parsed = call.schema.safeParse(JSON.parse(response.text ?? ""));
       if (parsed.success) return parsed.data;
       correction = `\n\nYour previous answer was rejected for these reasons:\n${z.prettifyError(parsed.error)}\nAnswer again and fix exactly these.`;
-    } catch (err) {
-      // Never log the request: it contains the user's photo.
-      console.error(`[gemini] ${call.model} attempt ${attempt + 1} failed:`, err instanceof Error ? err.message : "unknown error");
+    } catch (error) {
+      // Provider error messages can include request details or unvalidated model output.
+      const status = error instanceof Error && "status" in error && typeof error.status === "number"
+        ? " HTTP " + error.status
+        : "";
+      console.error("[gemini] " + call.model + " attempt " + (attempt + 1) + " failed." + status);
     }
   }
   return null;

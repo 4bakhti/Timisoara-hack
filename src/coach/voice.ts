@@ -1,39 +1,29 @@
-/**
- * The coach's voice.
- *
- * Fixed lines play from pre-generated clips (public/voice/<lang>/<id>.mp3) so there
- * is no delay. If a clip is missing, the phone's own speech synthesis is used, so
- * the coach still talks before the clips exist and when the network is down.
- *
- * Phones only allow sound after a tap: call unlockAudio() inside a click handler
- * before the first line.
- */
+/** Plays one local coach line at a time. Every attempt can be cancelled. */
+import { api } from "@/lib/api";
 import type { Lang } from "@/lib/contracts";
 import { phraseClipUrl, phraseText, type PhraseId } from "./phrases";
+import type { CoachInstruction } from "./types";
 
 const SPEECH_LANG: Record<Lang, string> = { en: "en-US", ro: "ro-RO" };
+// A silent PCM frame lets the shared audio element start inside the tap.
+const SILENCE = "data:audio/wav;base64,UklGRiUAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQEAAACA";
 
 let player: HTMLAudioElement | null = null;
-const missingClips = new Set<string>();
+let active: AbortController | null = null;
 let muted = false;
 
-/** Call from a user gesture (tap). Safe to call more than once. */
+function audioPlayer() {
+  player ??= new Audio();
+  player.preload = "auto";
+  return player;
+}
+
+/** Call from a tap before starting deferred playback. */
 export function unlockAudio(): void {
-  if (typeof window === "undefined") return;
-  if (!player) {
-    player = new Audio();
-    player.preload = "auto";
-  }
-  // Playing (and immediately pausing) inside the gesture unlocks later playback on iOS.
-  player.muted = true;
-  const attempt = player.play();
-  if (attempt) attempt.then(() => player?.pause()).catch(() => undefined);
-  player.muted = false;
-  if ("speechSynthesis" in window) {
-    const warm = new SpeechSynthesisUtterance(" ");
-    warm.volume = 0;
-    window.speechSynthesis.speak(warm);
-  }
+  if (typeof window === "undefined" || active) return;
+  const audio = audioPlayer();
+  audio.src = SILENCE;
+  void audio.play().catch(() => undefined);
 }
 
 export function setMuted(value: boolean): void {
@@ -42,71 +32,123 @@ export function setMuted(value: boolean): void {
 }
 
 export function stopSpeaking(): void {
-  if (typeof window === "undefined") return;
-  player?.pause();
-  if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+  active?.abort();
 }
 
-/** Says one of the fixed coach lines. Resolves when it has finished (or failed quietly). */
-export async function say(id: PhraseId, lang: Lang): Promise<void> {
-  if (muted || typeof window === "undefined") return;
-  const url = phraseClipUrl(id, lang);
-  if (!missingClips.has(url)) {
-    const played = await playClip(url);
-    if (played) return;
-    missingClips.add(url);
-  }
-  await speakWithDevice(phraseText(id, lang), lang);
+export function say(id: PhraseId, lang: Lang): Promise<void> {
+  const localOnly = id === "hold" || id === "three" || id === "two" || id === "one" || id === "got_it";
+  return speakInstruction({ id, text: phraseText(id, lang), to: "anyone" }, lang, { localOnly });
 }
 
-/** Says free text (for example a summary). Uses the server voice when available. */
-export async function sayText(text: string, lang: Lang): Promise<void> {
-  if (muted || typeof window === "undefined" || !text.trim()) return;
+export function sayText(text: string, lang: Lang): Promise<void> {
+  return speakInstruction({ id: "custom", text, to: "anyone" }, lang);
+}
+
+/** Fixed clip, server TTS, then device speech. Countdown never waits for a POST. */
+export async function speakInstruction(
+  line: CoachInstruction,
+  lang: Lang,
+  options: { localOnly?: boolean; signal?: AbortSignal } = {},
+): Promise<void> {
+  const text = line.text.trim();
+  if (typeof window === "undefined" || muted || !text || options.signal?.aborted) return;
+
+  stopSpeaking();
+  const controller = new AbortController();
+  const { signal } = controller;
+  active = controller;
+  const cancel = () => controller.abort();
+  options.signal?.addEventListener("abort", cancel, { once: true });
+
   try {
-    const res = await fetch("/api/speak", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ text, lang }),
-    });
-    if (res.ok && res.headers.get("content-type")?.startsWith("audio/")) {
-      const objectUrl = URL.createObjectURL(await res.blob());
-      const played = await playClip(objectUrl);
-      URL.revokeObjectURL(objectUrl);
-      if (played) return;
+    if (line.id !== "custom" && await playClip(phraseClipUrl(line.id, lang), signal, options.localOnly ? 250 : 450)) {
+      return;
     }
-  } catch {
-    // Fall through to the device voice.
+    if (!options.localOnly && !signal.aborted && text.length <= 300) {
+      const tts = new AbortController();
+      const stopTts = () => tts.abort();
+      signal.addEventListener("abort", stopTts, { once: true });
+      const timeout = window.setTimeout(stopTts, 1800);
+      let blob: Blob | null;
+      try {
+        blob = await api.speak({ text, lang }, tts.signal);
+      } finally {
+        window.clearTimeout(timeout);
+        signal.removeEventListener("abort", stopTts);
+      }
+      if (blob && !signal.aborted) {
+        const url = URL.createObjectURL(blob);
+        try {
+          if (await playClip(url, signal, 450)) return;
+        } finally {
+          URL.revokeObjectURL(url);
+        }
+      }
+    }
+    if (!signal.aborted) await speakWithDevice(text, lang, signal);
+  } finally {
+    options.signal?.removeEventListener("abort", cancel);
+    if (active === controller) active = null;
   }
-  await speakWithDevice(text, lang);
 }
 
-function playClip(url: string): Promise<boolean> {
+function playClip(url: string, signal: AbortSignal, startTimeout: number): Promise<boolean> {
+  if (signal.aborted) return Promise.resolve(false);
+  const audio = audioPlayer();
   return new Promise((resolve) => {
-    if (!player) player = new Audio();
-    const audio = player;
-    const done = (ok: boolean) => {
+    let finished = false;
+    const finish = (ok: boolean) => {
+      if (finished) return;
+      finished = true;
+      signal.removeEventListener("abort", abort);
       audio.onended = null;
       audio.onerror = null;
+      audio.onplaying = null;
+      window.clearTimeout(timer);
+      audio.pause();
+      if (!ok) {
+        audio.removeAttribute("src");
+        audio.load();
+      }
       resolve(ok);
     };
-    audio.onended = () => done(true);
-    audio.onerror = () => done(false);
+    const abort = () => finish(false);
+    let timer = window.setTimeout(abort, startTimeout);
+    audio.onplaying = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => finish(true), 8000);
+    };
+    audio.onended = () => finish(true);
+    audio.onerror = abort;
+    signal.addEventListener("abort", abort, { once: true });
     audio.src = url;
-    audio.play().catch(() => done(false));
+    void audio.play().catch(abort);
   });
 }
 
-function speakWithDevice(text: string, lang: Lang): Promise<void> {
+function speakWithDevice(text: string, lang: Lang, signal: AbortSignal): Promise<void> {
+  if (!("speechSynthesis" in window) || typeof SpeechSynthesisUtterance === "undefined") return Promise.resolve();
+  const synth = window.speechSynthesis;
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = SPEECH_LANG[lang];
+  utterance.rate = 1.02;
+
   return new Promise((resolve) => {
-    if (!("speechSynthesis" in window)) return resolve();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = SPEECH_LANG[lang];
-    utterance.rate = 1.02;
-    utterance.onend = () => resolve();
-    utterance.onerror = () => resolve();
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(utterance);
-    // Some browsers never fire onend; do not hang the coach on it.
-    window.setTimeout(resolve, 6000);
+    const done = () => {
+      window.clearTimeout(timer);
+      signal.removeEventListener("abort", abort);
+      utterance.onend = null;
+      utterance.onerror = null;
+      resolve();
+    };
+    const abort = () => {
+      done();
+      synth.cancel();
+    };
+    const timer = window.setTimeout(abort, 6000);
+    utterance.onend = done;
+    utterance.onerror = done;
+    signal.addEventListener("abort", abort, { once: true });
+    synth.speak(utterance);
   });
 }

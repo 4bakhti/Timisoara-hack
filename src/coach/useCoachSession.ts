@@ -12,6 +12,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createEngine } from "./engine";
+import { cancelCoachSpeech } from "./engineShared";
 import { INITIAL_COACH_STATE, type CoachSession, type CoachSessionOptions, type CoachState, type Engine } from "./types";
 
 class CoachStore {
@@ -40,6 +41,7 @@ class CoachStore {
       next.error === prev.error &&
       next.instruction?.id === prev.instruction?.id &&
       next.instruction?.text === prev.instruction?.text &&
+      next.instruction?.to === prev.instruction?.to &&
       next.parts.pose === prev.parts.pose &&
       next.parts.framing === prev.parts.framing &&
       next.parts.level === prev.parts.level &&
@@ -56,7 +58,7 @@ class CoachStore {
 }
 
 export function useCoachSession(options: CoachSessionOptions): CoachSession {
-  const { video, overlay, idea, mode, lang, paused = false, engine: engineKind = "auto" } = options;
+  const { video, overlay, idea, mode, lang, speech, paused = false, engine: engineKind = "auto" } = options;
   const still = video ? null : (options.still ?? null);
   const mirrored = options.mirrored ?? false;
   const voice = options.voice ?? true;
@@ -90,7 +92,15 @@ export function useCoachSession(options: CoachSessionOptions): CoachSession {
           lang,
           mirrored,
           voice,
-          emit: store.set,
+          speech,
+          emit: (patch) => {
+            const previous = store.get().phase;
+            if ((previous === "holding" || previous === "countdown") &&
+                patch.phase && !["holding", "countdown", "captured"].includes(patch.phase)) {
+              cancelCoachSpeech({ speech });
+            }
+            store.set(patch);
+          },
           onCapture: (shot) => onCaptureRef.current(shot),
         },
         engineKind,
@@ -105,19 +115,39 @@ export function useCoachSession(options: CoachSessionOptions): CoachSession {
       const image = new Image();
       image.crossOrigin = "anonymous";
       image.onload = () => begin(image);
-      image.onerror = () => store.set({ phase: "error", error: "image_load_failed" });
+      image.onerror = () => {
+        if (!cancelled) store.set({ phase: "error", error: "image_load_failed" });
+      };
       image.src = still;
     }
 
     return () => {
       cancelled = true;
       engine?.stop();
-      engineRef.current = null;
+      if (engineRef.current === engine) engineRef.current = null;
     };
-  }, [video, still, overlay, idea, mode, lang, mirrored, voice, paused, engineKind, store, run]);
+  }, [video, still, overlay, idea, mode, lang, mirrored, voice, speech, paused, engineKind, store, run]);
 
-  const captureNow = useCallback(() => engineRef.current?.captureNow(), []);
+  const captureNow = useCallback(() => { void engineRef.current?.captureNow(); }, []);
+  const requestCapture = useCallback(async (signal?: AbortSignal) => {
+    if (signal?.aborted || paused) return { ok: false, reason: "stale" } as const;
+    const stream = video?.srcObject;
+    const hasLiveTrack = typeof MediaStream !== "undefined" && stream instanceof MediaStream && stream.getVideoTracks().some((track) => track.readyState === "live");
+    if (!video || video.paused || !hasLiveTrack || video.readyState < 2 || !video.videoWidth || !video.videoHeight) {
+      return { ok: false, reason: "camera_not_ready" } as const;
+    }
+    const { phase } = store.get();
+    if (phase === "holding" || phase === "countdown") {
+      return { ok: false, reason: "capture_in_progress" } as const;
+    }
+    if (phase === "captured") return { ok: false, reason: "already_captured" } as const;
+    return engineRef.current?.captureNow(signal) ?? { ok: false, reason: "camera_not_ready" } as const;
+  }, [paused, store, video]);
+  const cancelPendingCapture = useCallback(() => {
+    engineRef.current?.stop();
+    engineRef.current = null;
+  }, []);
   const restart = useCallback(() => setRun((n) => n + 1), []);
 
-  return { ...state, captureNow, restart };
+  return { ...state, captureNow, requestCapture, cancelPendingCapture, restart };
 }

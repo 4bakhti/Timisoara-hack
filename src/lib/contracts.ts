@@ -164,6 +164,8 @@ export type ShotScore = z.infer<typeof ShotScore>;
 export const Health = z.object({
   gemini: z.boolean(),
   voice: z.boolean(),
+  /** Server has a key and a configured project agent. Does not probe ElevenLabs. */
+  voiceConversation: z.boolean().optional(),
   db: z.boolean(),
   auth: z.boolean(),
   preview: z.boolean(),
@@ -240,8 +242,24 @@ export type PreviewResponse = z.infer<typeof PreviewResponse>;
 /* ---------------------------------------------------------- API: /api/speak */
 
 /** Response is audio/mpeg. A 501 JSON error means "voice not configured". */
-export const SpeakRequest = z.object({ text: z.string().min(1).max(300), lang: Lang });
+export const SpeakRequest = z.object({ text: z.string().trim().min(1).max(300), lang: Lang });
 export type SpeakRequest = z.infer<typeof SpeakRequest>;
+
+/** Temporary, single-use ElevenLabs connection URL minted by the server. */
+export const VoiceSessionAccess = z.object({
+  signedUrl: z.string().max(4096).refine((value) => {
+    try {
+      const url = new URL(value);
+      return url.origin === "wss://api.elevenlabs.io" &&
+        url.pathname === "/v1/convai/conversation" &&
+        !url.username && !url.password && !url.hash &&
+        Boolean(url.searchParams.get("conversation_signature") || url.searchParams.get("token"));
+    } catch {
+      return false;
+    }
+  }),
+});
+export type VoiceSessionAccess = z.infer<typeof VoiceSessionAccess>;
 
 /* --------------------------------------------------------- API: /api/events */
 

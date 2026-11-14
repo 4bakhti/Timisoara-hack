@@ -1,3 +1,4 @@
+export { useVoiceDirector } from "./useVoiceDirector";
 export type {
   VoiceActionResult,
   VoiceActions,

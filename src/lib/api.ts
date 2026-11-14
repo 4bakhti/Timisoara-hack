@@ -18,6 +18,7 @@ import {
   ReviewResponse,
   Stats,
   VotePair,
+  VoiceSessionAccess,
   type AnalyzeRequest,
   type EventsRequest,
   type FeedbackRequest,
@@ -119,18 +120,24 @@ export const api = {
   },
 
   /** Spoken audio for free text, or null when the server voice is unavailable. */
-  async speak(req: SpeakRequest): Promise<Blob | null> {
+  async speak(req: SpeakRequest, signal?: AbortSignal): Promise<Blob | null> {
     try {
       const res = await fetch("/api/speak", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(req),
+        signal,
       });
       if (!res.ok || !res.headers.get("content-type")?.startsWith("audio/")) return null;
       return await res.blob();
     } catch {
       return null;
     }
+  },
+
+  /** Request fresh conversation access immediately before connecting. */
+  voiceSession(signal?: AbortSignal): Promise<VoiceSessionAccess> {
+    return request("/api/voice/session", VoiceSessionAccess, { method: "POST", cache: "no-store", signal });
   },
 
   /** Usage numbers for the results dashboard. Fire-and-forget; never throws. */

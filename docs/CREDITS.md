@@ -11,6 +11,7 @@ Everything in this project that we did not write ourselves. Add a row when you a
 | TypeScript | Language | Apache-2.0 |
 | zod | Validating data between modules and from AI responses | MIT |
 | MediaPipe Tasks Vision (`@mediapipe/tasks-vision`) | Body landmark detection on the phone | Apache-2.0 |
+| ElevenLabs Agents SDK (`@elevenlabs/client`) | Microphone conversation and client actions | MIT |
 | Google Gen AI SDK (`@google/genai`) | Calling the Gemini API | Apache-2.0 |
 | node-postgres (`pg`), Drizzle ORM | Database access | MIT, Apache-2.0 |
 | Auth0 Next.js SDK | Sign-in | MIT |
@@ -27,6 +28,7 @@ Everything in this project that we did not write ourselves. Add a row when you a
 |---|---|
 | Google Gemini API | Reading the scene, planning shots, reviewing results |
 | ElevenLabs | The coach's voice |
+| ElevenLabs Flash v2.5 and ElevenAgents | Bilingual correction speech and conversation |
 | MediaPipe Pose Landmarker model | Body landmarks (Apache-2.0 model from Google) |
 | Tiger Data (PostgreSQL) | Database |
 | Auth0 | Sign-in |

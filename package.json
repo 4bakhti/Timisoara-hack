@@ -10,10 +10,13 @@
     "lint": "eslint src scripts --no-error-on-unmatched-pattern",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
+    "voice:clips": "node --env-file-if-exists=.env.local --import tsx scripts/generate-voice-clips.ts",
+    "voice:check": "node --env-file-if-exists=.env.local --import tsx scripts/check-voice-agent.ts",
     "check": "npm run typecheck && npm run lint && npm run test && npm run build"
   },
   "dependencies": {
     "@auth0/nextjs-auth0": "^4.33.0",
+    "@elevenlabs/client": "1.36.1",
     "@google/genai": "^3.3.0",
     "@mediapipe/tasks-vision": "^1.2.3",
     "clsx": "^2.1.1",

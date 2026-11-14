@@ -5,8 +5,8 @@
  */
 import { coverMap, drawGuides, getPoseTemplate, grabFrame, sourceSize, syncCanvas } from "@/vision";
 import { phraseAudience, phraseText, type PhraseId } from "./phrases";
-import type { CoachInstruction, Engine, EngineConfig } from "./types";
-import { say, stopSpeaking } from "./voice";
+import type { CoachCaptureResult, CoachInstruction, CoachSpeechLine, Engine, EngineConfig } from "./types";
+import { cancelCoachSpeech, captureRejection, playCoachLine } from "./engineShared";
 
 const LOADING_MS = 600;
 const SEARCHING_MS = 1200;
@@ -26,6 +26,7 @@ export function createSimEngine(cfg: EngineConfig): Engine {
   let startedAt = 0;
   let stopped = false;
   let capturing = false;
+  let captured = false;
   let lastSpoken: PhraseId | null = null;
   let lastScore = 0;
 
@@ -35,10 +36,10 @@ export function createSimEngine(cfg: EngineConfig): Engine {
     to: phraseAudience(id),
   });
 
-  const speak = (id: PhraseId) => {
+  const speak = (id: PhraseId, kind: CoachSpeechLine["kind"] = "correction") => {
     if (!cfg.voice || lastSpoken === id) return;
     lastSpoken = id;
-    void say(id, cfg.lang);
+    playCoachLine(cfg, instruction(id), kind);
   };
 
   const draw = (score: number) => {
@@ -52,16 +53,26 @@ export function createSimEngine(cfg: EngineConfig): Engine {
     drawGuides(ctx, { map, targetBox: cfg.idea.framing.subjectBox, ghost: template?.points, score });
   };
 
-  const capture = async (manual: boolean) => {
-    if (capturing || stopped) return;
+  const capture = async (manual: boolean, signal?: AbortSignal): Promise<CoachCaptureResult> => {
+    const rejection = captureRejection(capturing, captured, stopped, signal);
+    if (rejection) return rejection;
     capturing = true;
+    cancelCoachSpeech(cfg);
     cancelAnimationFrame(raf);
     try {
       const full = await grabFrame(cfg.source, { mirrored: cfg.mirrored, quality: 0.92 });
       const small = await grabFrame(cfg.source, { mirrored: cfg.mirrored, maxSide: 1024, quality: 0.85 });
+      if (stopped || signal?.aborted) {
+        capturing = false;
+        if (!stopped) {
+          raf = requestAnimationFrame(tick);
+        }
+        return { ok: false, reason: "stale" };
+      }
       const total = Math.round(lastScore);
       cfg.emit({ phase: "captured", countdown: null, instruction: instruction("got_it") });
-      speak("got_it");
+      captured = true;
+      speak("got_it", "capture");
       cfg.onCapture({
         blob: full.blob,
         dataUrl: small.dataUrl,
@@ -77,8 +88,14 @@ export function createSimEngine(cfg: EngineConfig): Engine {
           light: null,
         },
       });
-    } catch (err) {
-      cfg.emit({ phase: "error", error: err instanceof Error ? err.message : "capture_failed" });
+      return { ok: true, outcome: "captured" };
+    } catch {
+      if (stopped) return { ok: false, reason: "stale" };
+      capturing = false;
+      if (manual) raf = requestAnimationFrame(tick);
+      if (signal?.aborted) return { ok: false, reason: "stale" };
+      cfg.emit({ phase: "error", countdown: null, error: "capture_failed" });
+      return { ok: false, reason: "capture_failed" };
     }
   };
 
@@ -113,7 +130,7 @@ export function createSimEngine(cfg: EngineConfig): Engine {
       lastScore = 91;
       if (afterCoach < HOLD_MS) {
         cfg.emit({ phase: "holding", score: 91, instruction: instruction("hold"), countdown: null });
-        speak("hold");
+        speak("hold", "countdown");
       } else {
         const step = Math.floor((afterCoach - HOLD_MS) / COUNT_STEP_MS);
         if (step >= 3) {
@@ -122,7 +139,7 @@ export function createSimEngine(cfg: EngineConfig): Engine {
         }
         const id = (["three", "two", "one"] as const)[step];
         cfg.emit({ phase: "countdown", score: 91, countdown: 3 - step, instruction: instruction(id) });
-        speak(id);
+        speak(id, "countdown");
       }
     }
 
@@ -138,12 +155,12 @@ export function createSimEngine(cfg: EngineConfig): Engine {
     stop() {
       stopped = true;
       cancelAnimationFrame(raf);
-      stopSpeaking();
+      cancelCoachSpeech(cfg);
       const ctx = cfg.overlay?.getContext("2d");
       if (ctx && cfg.overlay) ctx.clearRect(0, 0, cfg.overlay.width, cfg.overlay.height);
     },
-    captureNow() {
-      void capture(true);
+    captureNow(signal) {
+      return capture(true, signal);
     },
   };
 }

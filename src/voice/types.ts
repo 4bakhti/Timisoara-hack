@@ -1,4 +1,4 @@
-import type { CoachInstruction, CoachPhase } from "@/coach/types";
+import type { CoachInstruction, CoachPhase, CoachSpeechLine } from "@/coach/types";
 import type { Lang, SceneRead, ShotIdea } from "@/lib/contracts";
 
 export type VoiceFlowPhase = "intro" | "camera" | "reading" | "ideas" | "coach" | "result";
@@ -61,24 +61,23 @@ export interface VoiceDirectorState {
   status: "disconnected" | "connecting" | "listening" | "speaking" | "error";
   /** null until checked. This reports configuration separately from live connectivity. */
   configured: boolean | null;
+  /** User-selected microphone mute. */
   micMuted: boolean;
   reason: VoiceUnavailableReason | null;
   /** The last final line only, held in memory until it is replaced or the session ends. */
   transcript: { speaker: "user" | "agent"; text: string } | null;
 }
 
-export interface VoiceLine {
-  instruction: CoachInstruction;
-  ideaId: string;
-  lang: Lang;
-  kind: "correction" | "countdown" | "capture";
-}
+export type VoiceLine = CoachSpeechLine;
 
 export interface VoiceDirector {
   /** Start only from a gesture after explaining microphone transmission. */
   start(lang: Lang): Promise<void>;
-  end(): Promise<void>;
+  checkAvailability(): Promise<void>;
+  end(options?: { afterCapture?: boolean }): Promise<void>;
   setMicMuted(muted: boolean): void;
+  /** Keeps both local and conversational speech aligned with the output switch. */
+  setOutputEnabled(enabled: boolean): void;
   updateContext(context: VoiceContext): void;
   deliverCorrection(line: VoiceLine): void;
   cancelSpeech(): void;
