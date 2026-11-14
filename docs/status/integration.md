@@ -1,6 +1,6 @@
 # Integration: status
 
-Updated: Sat 14 Nov, 21:15. `main` at the commit that adds this file.
+Updated: Sat 14 Nov, 23:50. `main` at the commit that adds this file.
 
 ## Merged into `main`, in order
 
@@ -19,7 +19,8 @@ Updated: Sat 14 Nov, 21:15. `main` at the commit that adds this file.
 | 11 | `quality/release-readiness` (the corrected no-reply tip): quality review Q1–Q5, phone acceptance protocol, user pilot protocol, lifecycle regression checks | `e41711c` |
 | 12 | Quality follow-up: before and after totals over the same measured parts (Q5); the lifecycle checks run in `npm run test`; re-check of Q1–Q5 in `docs/status/quality.md` | `f5060a4`, `98a1d99` |
 | 13 | Tiger Data connected: `sslmode=require` gets its libpq meaning (Tiger's certificates come from Timescale's own CA, so every connection had failed); credential downloads ignored by git; honest empty-recipes wording | `00a829b`, `fcbde5a` |
-| 14 | TimescaleDB continuous aggregate `coach_activity_hourly` (migration 0003, real-time, refreshed every 15 minutes) behind a new hour-by-hour chart on `/stats`; memory storage computes the same series | the commit that adds this line |
+| 14 | TimescaleDB continuous aggregate `coach_activity_hourly` (migration 0003, real-time, refreshed every 15 minutes) behind a new hour-by-hour chart on `/stats`; memory storage computes the same series | `5d07810` |
+| 15 | From the team's phone test: the target outline follows the person (anchored on the torso); framing scores 100 when the person fits the frame and only asks for clear changes; upper-body and sitting shots are coached with the torso estimated from the shoulders. Logged in `docs/LIVING_LAB.md` | `7e4384d` |
 
 **Do not merge `codex-2/storage-recipes` again.** Its last commit (`8969107`) was signed with a personal e-mail address. Its changes are already in `main`, re-committed unchanged as `5204a11` under the GitHub no-reply address. Merging the branch would add nothing but that address to the history.
 
