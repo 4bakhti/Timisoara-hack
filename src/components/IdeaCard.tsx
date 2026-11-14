@@ -1,3 +1,4 @@
+import type { PreviewState } from "@/components/usePosePreviews";
 import type { Lang, ShotIdea } from "@/lib/contracts";
 import { t } from "@/i18n/strings";
 import { BONES, getPoseTemplate, headRadiusFor } from "@/vision";
@@ -52,11 +53,41 @@ export function FramingDiagram({ idea, className }: { idea: ShotIdea; className?
   );
 }
 
-export function IdeaCard({ idea, lang, onUse }: { idea: ShotIdea; lang: Lang; onUse: () => void }) {
+export function IdeaCard({
+  idea,
+  lang,
+  onUse,
+  preview,
+}: {
+  idea: ShotIdea;
+  lang: Lang;
+  onUse: () => void;
+  /** An AI preview of this idea, when previews were requested. */
+  preview?: PreviewState;
+}) {
+  const ready = preview?.status === "ready" ? preview : null;
   return (
     <article className="flex w-[84%] shrink-0 snap-center flex-col gap-3 rounded-2xl bg-neutral-900/95 p-4 ring-1 ring-white/10">
+      {preview && preview.status !== "failed" && (
+        <figure className="relative h-64 overflow-hidden rounded-xl bg-neutral-950">
+          {ready ? (
+            // eslint-disable-next-line @next/next/no-img-element -- a generated data URL
+            <img src={ready.image} alt={`${t("aiPreviewLabel", lang)}: ${idea.title}`} className="h-full w-full object-contain" />
+          ) : (
+            <span className="grid h-full place-items-center text-sm text-neutral-300" role="status">
+              <span className="flex items-center gap-2">
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/25 border-t-green-400" aria-hidden="true" />
+                {t("drawingPose", lang)}
+              </span>
+            </span>
+          )}
+          <figcaption className="absolute left-2 top-2 rounded-full bg-black/70 px-2.5 py-1 text-[11px] font-medium text-amber-200">
+            {t("aiPreviewLabel", lang)}
+          </figcaption>
+        </figure>
+      )}
       <div className="flex gap-3">
-        <FramingDiagram idea={idea} />
+        {!ready && <FramingDiagram idea={idea} />}
         <div className="min-w-0">
           <h3 className="text-lg font-semibold leading-tight">{idea.title}</h3>
           <p className="mt-1 text-sm leading-snug text-neutral-300">{idea.why}</p>
