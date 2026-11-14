@@ -151,7 +151,7 @@ let stillTracker: Promise<StillTracker> | null = null;
 
 /** The shared tracker for single photos. Loaded on first use. */
 export function getStillTracker(): Promise<StillTracker> {
-  stillTracker ??= createStillTracker();
+  stillTracker ??= createStillTracker({ withMask: true });
   return stillTracker;
 }
 
