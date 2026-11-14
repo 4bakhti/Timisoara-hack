@@ -42,7 +42,7 @@ Return:
 - "improved": one to three concrete things that are better in AFTER than in BEFORE, most important first. Each is one short sentence about something visible.
 - "lesson": a short title and two sentences explaining the principle, so the person can reuse it next time.
 
-Be honest. Do not invent improvements. If AFTER is not better in some respect, leave it out; if nothing improved, give one honest observation phrased as the next thing to try.
+Be honest. Do not invent improvements. The scores are automatic measurements of pose and framing, not proof that AFTER looks better: describe only differences you can actually see in the two images. If the two photos look the same, say so. If AFTER is not better in some respect, leave it out; if nothing improved, give one honest observation phrased as the next thing to try.
 Write in ${LANGUAGE[lang]}. ${NEVER}`;
 }
 
