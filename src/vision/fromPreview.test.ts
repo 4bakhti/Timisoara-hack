@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Box, Point2, PosePointName } from "@/lib/contracts";
 import { POSE_POINT_NAMES } from "@/lib/contracts";
-import { targetFromPose } from "./fromPreview";
+import { fitTargetToFrame, resampleMask, targetFromPose } from "./fromPreview";
 import { poseFeatures, templateToImage } from "./geometry";
 import { matchPose } from "./match";
 import { getPoseTemplate } from "./poses/catalog";
@@ -63,5 +63,32 @@ describe("targetFromPose", () => {
 
     const tiny = templateToImage(getPoseTemplate("relaxed-stand").points, { x: 0.45, y: 0.45, w: 0.05, h: 0.08 }, ASPECT);
     expect(targetFromPose(trackedFrom(tiny), ASPECT)).toBeNull();
+  });
+});
+
+describe("fitTargetToFrame", () => {
+  const base = targetFromPose(trackedFrom(templateToImage(getPoseTemplate("hand-on-hip").points, BOX, 0.5)), 0.5)!;
+
+  it("leaves a target alone when the shapes match", () => {
+    expect(fitTargetToFrame(base, 0.75, 0.75)).toBe(base);
+  });
+
+  it("narrows the box toward the centre for a narrower preview, keeping the pose and height", () => {
+    const fitted = fitTargetToFrame(base, 0.5, 1);
+    expect(fitted.points).toBe(base.points);
+    expect(fitted.box.y).toBe(base.box.y);
+    expect(fitted.box.h).toBe(base.box.h);
+    expect(fitted.box.w).toBeCloseTo(base.box.w / 2, 6);
+    expect(fitted.box.x + fitted.box.w / 2).toBeCloseTo(0.5 + (base.box.x + base.box.w / 2 - 0.5) / 2, 6);
+  });
+
+  it("resamples the outline so the person keeps their width on screen", () => {
+    // A 4×2 mask with the person in the middle two columns.
+    const mask = { width: 4, height: 2, alpha: new Uint8ClampedArray([0, 255, 255, 0, 0, 255, 255, 0]) };
+    const wide = resampleMask(mask, 0.5, 1);
+    expect(wide.width).toBe(8);
+    expect(wide.height).toBe(2);
+    // Columns outside the preview are empty; the person stays centred and half as wide.
+    expect(Array.from(wide.alpha.slice(0, 8))).toEqual([0, 0, 0, 255, 255, 0, 0, 0]);
   });
 });

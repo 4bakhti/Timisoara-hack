@@ -8,7 +8,7 @@
 import type { Box, PosePointName, PosePoints } from "@/lib/contracts";
 import { POSE_POINT_NAMES } from "@/lib/contracts";
 import { createStillTracker, hasTorso, type StillTracker, type TrackedPose } from "./tracker";
-import type { CustomTarget } from "./types";
+import type { CustomTarget, SilhouetteMask } from "./types";
 
 /** A person smaller than this share of the picture's height is too small to coach toward. */
 const MIN_FIGURE_HEIGHT = 0.15;
@@ -48,6 +48,41 @@ export function targetFromPose(pose: TrackedPose, aspect: number): CustomTarget 
   return { points, box, silhouette: pose.mask, world: pose.world };
 }
 
+/**
+ * Fits a target found in a preview onto the camera frame when their shapes
+ * differ (aspect = width / height). Both show the same scene at the same
+ * height, centred, so only horizontal positions move: the box shifts and narrows
+ * or widens, and the outline is resampled. The pose itself is unchanged, because
+ * it is stored in units of the figure's height. Pure; see the tests.
+ */
+export function fitTargetToFrame(target: CustomTarget, previewAspect: number, frameAspect: number): CustomTarget {
+  if (!(previewAspect > 0) || !(frameAspect > 0) || Math.abs(previewAspect / frameAspect - 1) < 0.01) return target;
+  const k = previewAspect / frameAspect;
+  const toFrame = (x: number) => 0.5 + (x - 0.5) * k;
+  const box = { ...target.box, x: toFrame(target.box.x), w: target.box.w * k };
+  return {
+    ...target,
+    box,
+    silhouette: target.silhouette ? resampleMask(target.silhouette, previewAspect, frameAspect) : undefined,
+  };
+}
+
+/** Redraws a mask made for one picture shape onto a frame of another shape (same height, centred). */
+export function resampleMask(mask: SilhouetteMask, fromAspect: number, toAspect: number): SilhouetteMask {
+  const height = mask.height;
+  const width = Math.max(1, Math.round(mask.width * (toAspect / fromAspect)));
+  const alpha = new Uint8ClampedArray(width * height);
+  const k = toAspect / fromAspect;
+  for (let x = 0; x < width; x++) {
+    // Frame x (0–1) → preview x (0–1).
+    const px = 0.5 + ((x + 0.5) / width - 0.5) * k;
+    if (px < 0 || px >= 1) continue;
+    const sx = Math.min(mask.width - 1, Math.floor(px * mask.width));
+    for (let y = 0; y < height; y++) alpha[y * width + x] = mask.alpha[y * mask.width + sx];
+  }
+  return { width, height, alpha };
+}
+
 let previewTracker: Promise<StillTracker> | null = null;
 
 function getPreviewTracker(): Promise<StillTracker> {
@@ -65,13 +100,29 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
-/** Reads a preview picture (data URL or address) and returns its coaching target, or null. */
-export async function targetFromPreview(src: string): Promise<CustomTarget | null> {
+/** The width / height of a picture (data URL or address), or null if it cannot be loaded. */
+export async function pictureAspect(src: string): Promise<number | null> {
+  try {
+    const image = await loadImage(src);
+    return image.naturalWidth / Math.max(1, image.naturalHeight);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Reads a preview picture (data URL or address) and returns its coaching target,
+ * fitted to the camera frame's shape when `frameAspect` is given. Null when no
+ * usable person is found.
+ */
+export async function targetFromPreview(src: string, frameAspect?: number | null): Promise<CustomTarget | null> {
   try {
     const image = await loadImage(src);
     const tracker = await getPreviewTracker();
     const pose = tracker.detect(image);
-    return pose ? targetFromPose(pose, image.naturalWidth / Math.max(1, image.naturalHeight)) : null;
+    const previewAspect = image.naturalWidth / Math.max(1, image.naturalHeight);
+    const target = pose ? targetFromPose(pose, previewAspect) : null;
+    return target && frameAspect ? fitTargetToFrame(target, previewAspect, frameAspect) : target;
   } catch {
     return null;
   }
