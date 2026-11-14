@@ -252,6 +252,19 @@ describe("framing", () => {
       expect(framing?.corrections).toEqual([]);
     });
 
+    it("does not send a seated or close person back for a pose that also works upper-body", () => {
+      const crossed = getPoseTemplate("arms-crossed").points;
+      const live: Partial<Record<keyof typeof crossed, [number, number]>> = {
+        ...templateToImage(crossed, { x: 0.15, y: 0.18, w: 0.7, h: 1.9 }, PORTRAIT),
+      };
+      for (const name of ["lHip", "rHip", "lKnee", "rKnee", "lAnkle", "rAnkle"] as const) delete live[name];
+      // BOX is a full-length box: on its own it would want the feet in the picture.
+      expect(matchFraming(live, crossed, BOX, PORTRAIT, "solo")?.corrections[0]?.id).toBe("step_back");
+      const upper = matchFraming(live, crossed, BOX, PORTRAIT, "solo", { halfBody: true });
+      expect(upper?.corrections).toEqual([]);
+      expect(upper?.score).toBe(100);
+    });
+
     it("still asks for distance when the head is cut off", () => {
       const live = closeUp({ x: 0.15, y: -0.02, w: 0.7, h: 1.9 });
       expect(matchFraming(live, template, upperBody, PORTRAIT, "solo")?.corrections[0].id).toBe("step_back");

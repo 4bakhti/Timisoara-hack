@@ -109,6 +109,8 @@ export interface ScoreInput {
 export function computeShotScore(input: ScoreInput): ShotScore {
   const { pose, idea, mode, aspect } = input;
   const template = input.target ? { points: input.target.points } : getPoseTemplate(idea.subject?.poseTemplateId);
+  // A pose that also works as an upper-body pose is judged as one when the hips are out of sight.
+  const framingOptions = { halfBody: !input.target && getPoseTemplate(idea.subject?.poseTemplateId).tags.includes("half-body") };
   const box = input.target?.box ?? idea.framing.subjectBox;
   const person = pose && hasUpperBody(pose.points) ? pose : null;
 
@@ -116,7 +118,7 @@ export function computeShotScore(input: ScoreInput): ShotScore {
   const framing = !idea.subject
     ? null
     : person
-      ? (matchFraming(person.points, template.points, box, aspect, mode)?.score ?? 0)
+      ? (matchFraming(person.points, template.points, box, aspect, mode, framingOptions)?.score ?? 0)
       : 0;
 
   let poseScore: number | null = null;

@@ -214,8 +214,21 @@ const SIZE_SPAN = Math.log(2.2);
 const HEAD_ABOVE_TOP = 0.07;
 /** The soles below the ankles, as a share of the figure's height. */
 const FEET_BELOW_ANKLES = 0.03;
-/** An idea whose box reaches this far down is cut at the bottom of the frame on purpose (upper body, three-quarter). */
-const CUT_AT_BOTTOM = 0.95;
+/**
+ * An idea whose box reaches this far down is cut at the bottom of the frame on purpose
+ * (upper body, sitting at a table): the planner is told to end those boxes at the bottom
+ * edge, while full-length boxes leave a margin (they end at about 0.9 to 0.95).
+ */
+const CUT_AT_BOTTOM = 0.98;
+
+export interface FramingOptions {
+  /**
+   * The pose also works as an upper-body pose (tagged half-body). With the hips
+   * out of sight the shot is then judged as cut at the bottom, so someone sitting
+   * at a table or close to the camera is not sent back for a full-length shot.
+   */
+  halfBody?: boolean;
+}
 
 /**
  * The box that puts the template's torso onto the live person's torso, same centre
@@ -252,10 +265,12 @@ export function matchFraming(
   box: Box,
   aspect: number,
   mode: CoachMode,
+  options: FramingOptions = {},
 ): FramingMatch | null {
   const fit = anchoredBox(live, template, aspect);
   if (!fit) return null;
-  const cutAtBottom = box.y + box.h >= CUT_AT_BOTTOM;
+  const hipsHidden = !live.lHip || !live.rHip;
+  const cutAtBottom = box.y + box.h >= CUT_AT_BOTTOM || (Boolean(options.halfBody) && hipsHidden);
 
   const dx = fit.x + fit.w / 2 - (box.x + box.w / 2);
   const dy = fit.y - box.y;
@@ -311,6 +326,7 @@ export function matchAll(
   mode: CoachMode,
   /** Live 3D points for matching catalog templates with depth targets. */
   world?: WorldPoints,
+  framingOptions: FramingOptions = {},
 ): { pose: PoseMatch | null; framing: FramingMatch | null } {
   const liveFeatures = poseFeatures(toIsotropic(live, aspect));
   const templateFeatures = poseFeatures(template);
@@ -329,6 +345,6 @@ export function matchAll(
   }
   return {
     pose: liveFeatures && templateFeatures ? matchPose(liveFeatures, templateFeatures) : null,
-    framing: matchFraming(live, template, box, aspect, mode),
+    framing: matchFraming(live, template, box, aspect, mode, framingOptions),
   };
 }

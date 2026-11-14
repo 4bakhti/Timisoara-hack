@@ -18,9 +18,10 @@ Rules:
 - Write every sentence (title, why, photographer.say, subject.say, light.note, space, and the background lists) in ${LANGUAGE[lang]}. Keep sentences short and concrete.
 - "why" is one sentence naming the photographic principle behind the idea.
 - "photographer.say" tells the person holding the phone exactly what to do: where to stand, how high to hold the phone, and what to keep out of the frame (use the things you listed in background.avoid).
-- When a person is in the scene, or the user says someone will step in, give every idea a "subject". "subject.say" is one sentence telling them how to stand. "subject.poseTemplateId" must be one of the listed pose ids, chosen to fit the scene: pick a leaning pose only if there is something to lean on, a sitting pose only if there is somewhere to sit.
+- When a person is in the scene, or the user says someone will step in, give every idea a "subject". "subject.say" is one sentence telling them how to stand or sit. "subject.poseTemplateId" must be one of the listed pose ids, chosen to fit the scene: pick a leaning pose only if there is something to lean on, a sitting pose only if there is somewhere to sit.
+- Plan from where the person is now. If they are sitting (on a chair, a bench, at a table or a desk), or the camera is close and only their head and upper body show, every idea must work from there: keep them sitting and close. Use upper-body shots with a pose tagged half-body (only the upper body is matched, so these work sitting down too), or a sitting pose when their whole seated body fits in the frame. Never ask a seated person to stand up, and never plan a full-length standing shot for them. "subject.say" then talks about their head, shoulders, arms and hands, not their stance.
 - When the scene has no person and is about an object, food or a place, leave "subject" out of every idea.
-- "framing.subjectBox" is where the subject should end up in the final frame, as fractions of the frame: x and y are the top-left corner, w and h the size. All are between 0 and 1, with x + w <= 1 and y + h <= 1. Leave headroom. For a standing full-length person use h of about 0.8 to 0.9 and w of about 0.35 to 0.5. Use the rule of thirds when it helps the idea.
+- "framing.subjectBox" is where the subject should end up in the final frame, as fractions of the frame: x and y are the top-left corner, w and h the size. All are between 0 and 1, with x + w <= 1 and y + h <= 1. Leave headroom above the head. For a standing full-length person use h of about 0.8 to 0.9 and w of about 0.35 to 0.5. For an upper-body or seated-at-a-table shot the frame cuts the person at the chest or waist: the box reaches the bottom edge exactly (y + h = 1), with y of about 0.08 to 0.2. Use the rule of thirds when it helps the idea.
 - "framing.levelDeg" is 0 unless a deliberate tilt is part of the idea.
 - "id" is a short lowercase slug, unique within your answer.
 - ${NEVER}`;
@@ -29,7 +30,7 @@ Rules:
 export function analyzeUser(mode: CoachMode): string {
   const situation =
     mode === "solo"
-      ? "The phone will be propped up where it is now and the user will walk into the frame alone. Plan for one person even if nobody is visible, and make photographer.say about where to prop the phone."
+      ? "The camera stays where it is now (a phone propped up somewhere, or a laptop) and the user poses alone in front of it. If they are already in the photo, plan from where they are: someone sitting stays sitting, someone close stays close. If nobody is visible, plan for one person stepping into the frame. Make photographer.say about where to place the camera."
       : "Someone else is holding the phone. The photo is of a person in this scene, or of the scene itself if there is no person.";
   const poses = POSE_TEMPLATE_INFO.map((p) => `- ${p.id}: ${p.describe} [${p.tags.join(", ")}]`).join("\n");
   return `${situation}\n\nAvailable poses:\n${poses}\n\nPlan three shots for the scene in the photo.`;

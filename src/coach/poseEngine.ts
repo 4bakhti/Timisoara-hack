@@ -53,6 +53,8 @@ const easeBox = (from: Box, to: Box, k: number): Box => ({
 export function createPoseEngine(cfg: EngineConfig): Engine {
   // A target taken from an AI preview replaces the template and the planner's box.
   const template = cfg.target ? { points: cfg.target.points } : getPoseTemplate(cfg.idea.subject?.poseTemplateId);
+  // A pose that also works as an upper-body pose (tagged half-body) does not send a seated or close person back.
+  const framingOptions = { halfBody: !cfg.target && getPoseTemplate(cfg.idea.subject?.poseTemplateId).tags.includes("half-body") };
   const box = cfg.target?.box ?? cfg.idea.framing.subjectBox;
   const brain = new CoachBrain({ mode: cfg.mode, expectPose: Boolean(cfg.idea.subject), style: cfg.idea.style });
   const recorder = createRecorder(cfg);
@@ -205,7 +207,7 @@ export function createPoseEngine(cfg: EngineConfig): Engine {
     // Shoulders are enough: with the hips out of sight (sitting, a shot cut at the waist) the torso is estimated.
     const visible = hasUpperBody(points);
     const aspect = size.width / size.height;
-    const measured = visible ? matchAll(points, template.points, box, aspect, cfg.mode, pose?.world) : { pose: null, framing: null };
+    const measured = visible ? matchAll(points, template.points, box, aspect, cfg.mode, pose?.world, framingOptions) : { pose: null, framing: null };
     // The target shape stands on the person: same torso place and size, so only the limbs differ.
     const anchored = visible ? anchoredBox(points, template.points, aspect) : null;
     ghostBox = anchored ? (ghostBox ? easeBox(ghostBox, anchored, FOLLOW) : anchored) : null;
