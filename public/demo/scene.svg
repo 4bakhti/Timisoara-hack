@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 1200" width="900" height="1200">
+  <title>A person standing by a window in a room (drawn for the Framewise demo)</title>
+  <defs>
+    <linearGradient id="wall" x1="0" x2="1" y1="0" y2="0">
+      <stop offset="0" stop-color="#efe6d2"/>
+      <stop offset="1" stop-color="#c9bc9f"/>
+    </linearGradient>
+    <linearGradient id="floor" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#9a6a42"/>
+      <stop offset="1" stop-color="#5f3c22"/>
+    </linearGradient>
+    <linearGradient id="light" x1="0" x2="1" y1="0" y2="0">
+      <stop offset="0" stop-color="#fffbe8" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#fffbe8" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="sky" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#bfe0f5"/>
+      <stop offset="1" stop-color="#e8f4fb"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Room -->
+  <rect width="900" height="880" fill="url(#wall)"/>
+  <rect y="880" width="900" height="320" fill="url(#floor)"/>
+  <rect y="870" width="900" height="14" fill="#7d5434"/>
+
+  <!-- Window on the left with daylight falling into the room -->
+  <rect x="40" y="120" width="250" height="420" rx="6" fill="url(#sky)"/>
+  <path d="M120 470 Q150 430 190 450 Q230 420 270 460 L290 540 L40 540 L40 480 Q80 455 120 470Z" fill="#9cc79a"/>
+  <g fill="none" stroke="#fafafa" stroke-width="16">
+    <rect x="40" y="120" width="250" height="420" rx="6"/>
+    <path d="M165 120V540M40 330H290"/>
+  </g>
+  <rect x="24" y="540" width="282" height="22" rx="4" fill="#fafafa"/>
+  <polygon points="290,140 560,420 560,1200 290,1200 40,560 290,560" fill="url(#light)"/>
+
+  <!-- Picture frame and plant on the right -->
+  <rect x="640" y="190" width="170" height="130" rx="4" fill="#3d4f5c"/>
+  <rect x="654" y="204" width="142" height="102" fill="#e9c46a"/>
+  <path d="M654 306 L700 250 L735 285 L760 262 L796 306Z" fill="#2a9d8f"/>
+  <rect x="690" y="760" width="110" height="130" rx="10" fill="#b5653a"/>
+  <g fill="#3f7d4e">
+    <ellipse cx="745" cy="690" rx="70" ry="95"/>
+    <ellipse cx="690" cy="720" rx="45" ry="70" transform="rotate(-25 690 720)"/>
+    <ellipse cx="800" cy="715" rx="45" ry="70" transform="rotate(25 800 715)"/>
+  </g>
+
+  <!-- The person: standing, arms loosely crossed, turned a little toward the window -->
+  <ellipse cx="455" cy="1110" rx="150" ry="26" fill="#000" opacity="0.18"/>
+  <g stroke-linecap="round" stroke-linejoin="round">
+    <path d="M415 790 L405 1090" stroke="#2f3e5c" stroke-width="44" fill="none"/>
+    <path d="M490 790 L505 1090" stroke="#2f3e5c" stroke-width="44" fill="none"/>
+    <path d="M380 1095 h50 M480 1095 h55" stroke="#22252b" stroke-width="26"/>
+    <path d="M375 470 Q450 440 530 470 L545 800 Q452 830 362 800 Z" fill="#d1495b"/>
+    <path d="M380 490 Q340 600 395 640 L520 640 Q560 600 525 490" fill="none" stroke="#b23a4b" stroke-width="40"/>
+    <path d="M405 630 L515 615" stroke="#e8b48f" stroke-width="30"/>
+    <rect x="432" y="400" width="40" height="60" rx="16" fill="#e8b48f"/>
+    <ellipse cx="452" cy="355" rx="62" ry="72" fill="#e8b48f"/>
+    <path d="M390 345 Q392 268 455 272 Q520 270 518 350 Q500 300 455 305 Q410 305 390 345Z" fill="#3b2a20"/>
+    <path d="M428 385 Q450 398 472 385" fill="none" stroke="#8c4a3a" stroke-width="5"/>
+    <circle cx="430" cy="352" r="6" fill="#2b2b2b"/>
+    <circle cx="472" cy="352" r="6" fill="#2b2b2b"/>
+  </g>
+</svg>

@@ -52,12 +52,15 @@ export function HomeScreen() {
           <Link href="/shoot" className={primary}>
             {t("start", lang)}
           </Link>
-          <nav className="grid grid-cols-3 gap-2">
+          <nav className="grid grid-cols-2 gap-2 min-[400px]:grid-cols-4">
             <Link href="/recipes" className={quiet}>
               {t("navRecipes", lang)}
             </Link>
             <Link href="/stats" className={quiet}>
               {t("navStats", lang)}
+            </Link>
+            <Link href="/demo" className={quiet}>
+              {t("navDemo", lang)}
             </Link>
             <Link href="/lab" className={quiet}>
               {t("navLab", lang)}

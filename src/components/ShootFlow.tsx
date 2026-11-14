@@ -9,10 +9,15 @@
  *
  * Given a `recipe`, the scene is not read: once the user has started the camera
  * (or chosen a picture), the recipe's idea goes straight to the coach.
+ *
+ * With `demo`, nothing touches the camera, the network or the AI: a drawn scene
+ * stands in for the camera, the bundled sample plan for the reading, the scripted
+ * coach for tracking, and the sample review for the comparison. Every screen says so.
  */
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { unlockAudio, useCoachSession, type CapturedShot } from "@/coach";
+import { deviceSpeech } from "@/components/deviceSpeech";
 import { FeedbackForm } from "@/components/FeedbackForm";
 import { IdeaCard } from "@/components/IdeaCard";
 import { LangToggle } from "@/components/LangToggle";
@@ -23,7 +28,7 @@ import { t, type StringKey } from "@/i18n/strings";
 import { api } from "@/lib/api";
 import { APP_NAME, APP_TAGLINE } from "@/lib/brand";
 import type { CoachMode, Lang, Recipe, ReviewResponse, ShotIdea, ShotPlan, ShotScore } from "@/lib/contracts";
-import { SAMPLE_PLAN_PERSON } from "@/lib/fixtures";
+import { SAMPLE_PLAN_PERSON, sampleReview } from "@/lib/fixtures";
 import { useLang } from "@/state/lang";
 import { grabFrame, requestMotionPermission, scoreStill, shrinkImage } from "@/vision";
 
@@ -31,12 +36,18 @@ type Step = "intro" | "camera" | "reading" | "ideas" | "coach" | "result";
 type Facing = "environment" | "user";
 
 const READING_LINES: StringKey[] = ["reading1", "reading2", "reading3"];
+/** Drawn for the demo; served from public/. */
+export const DEMO_SCENE = "/demo/scene.svg";
+/** Camera problems after which the demo is the useful way forward. */
+const DEMO_HINT: StringKey[] = ["cameraDenied", "cameraMissing", "insecure"];
 const SCORE_PARTS = ["pose", "framing", "crop", "light", "level"] as const;
 /** Sent to the review when the "before" picture could not be scored. Never shown as a result. */
 const UNSCORED: ShotScore = { total: 0, framing: null, level: null, pose: null, crop: null, light: null };
 
 const overCamera = "rounded-2xl bg-black/65 p-3 backdrop-blur";
 const sampleTag = "rounded-full bg-amber-400/20 px-3 py-1 text-xs font-normal text-amber-200";
+const demoTag = "inline-flex min-h-8 items-center rounded-full bg-amber-400 px-3 text-xs font-semibold uppercase tracking-wide text-black";
+const demoLink = "text-center text-sm text-neutral-300 underline underline-offset-4";
 
 /** A dash for sighted users, the words for screen readers. Never a zero. */
 function NotMeasured({ lang }: { lang: Lang }) {
@@ -48,7 +59,7 @@ function NotMeasured({ lang }: { lang: Lang }) {
   );
 }
 
-export function ShootFlow({ recipe, onExit, round }: { recipe?: Recipe; onExit?: () => void; round?: string }) {
+export function ShootFlow({ recipe, onExit, round, demo = false }: { recipe?: Recipe; onExit?: () => void; round?: string; demo?: boolean }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const pictureUrlRef = useRef<string | null>(null);
@@ -98,6 +109,14 @@ export function ShootFlow({ recipe, onExit, round }: { recipe?: Recipe; onExit?:
   };
 
   const finishResult = async (captured: CapturedShot, chosen: ShotIdea, beforeImage: string, run: number) => {
+    if (demo) {
+      // Scoring the drawing would load the tracking model from the network. The demo stays offline:
+      // the "before" side is shown as not measured, and the review is the bundled sample.
+      setBeforeScore(null);
+      setBeforeScored(true);
+      setReview({ ...sampleReview(lang), mock: true });
+      return;
+    }
     let scored: ShotScore | null = null;
     try {
       scored = await scoreStill(beforeImage, chosen, mode);
@@ -131,6 +150,8 @@ export function ShootFlow({ recipe, onExit, round }: { recipe?: Recipe; onExit?:
     lang,
     mirrored,
     voice,
+    engine: demo ? "sim" : "auto",
+    speech: demo ? deviceSpeech : undefined,
     onCapture: handleCapture,
   });
 
@@ -230,11 +251,27 @@ export function ShootFlow({ recipe, onExit, round }: { recipe?: Recipe; onExit?:
     setStep("coach");
   };
 
+  /** Demo: the drawing stands in for the camera. Nothing is requested from the browser. */
+  const startDemo = () => {
+    unlockAudio();
+    setProblem(null);
+    setPicture(DEMO_SCENE);
+    setStep("camera");
+  };
+
   const readScene = async () => {
     if (busyRef.current) return;
     busyRef.current = true;
     setProblem(null);
     try {
+      if (demo) {
+        // The bundled sample plan, never a reading: the drawing does not leave the page.
+        setBefore(await shrinkImage(DEMO_SCENE, 1024));
+        setPlan(SAMPLE_PLAN_PERSON);
+        setMock(true);
+        setStep("ideas");
+        return;
+      }
       let image: string;
       try {
         image = await currentFrame();
@@ -325,7 +362,7 @@ export function ShootFlow({ recipe, onExit, round }: { recipe?: Recipe; onExit?:
       <video ref={videoRef} playsInline muted className={`absolute inset-0 h-full w-full object-cover ${flipClass}`} />
       {picture && !live && (
         // eslint-disable-next-line @next/next/no-img-element -- a local picture standing in for the camera
-        <img src={picture} alt="" className="absolute inset-0 h-full w-full object-cover" />
+        <img src={picture} alt={demo ? t("demoSceneAlt", lang) : ""} className="absolute inset-0 h-full w-full object-cover" />
       )}
       <canvas ref={setCanvas} className={`absolute inset-0 h-full w-full ${flipClass} ${coaching ? "" : "hidden"}`} />
       {showStill && (
@@ -345,9 +382,17 @@ export function ShootFlow({ recipe, onExit, round }: { recipe?: Recipe; onExit?:
                 {t("home", lang)}
               </Link>
             )}
-            <LangToggle />
+            <span className="flex items-center gap-2">
+              {demo && <span className={demoTag}>{t("demoBadge", lang)}</span>}
+              <LangToggle />
+            </span>
           </div>
-          {recipe ? (
+          {demo ? (
+            <div>
+              <h1 className="text-5xl font-semibold tracking-tight">{t("demoTitle", lang)}</h1>
+              <p className="mt-3 text-lg leading-snug text-neutral-300">{t("demoIntro", lang)}</p>
+            </div>
+          ) : recipe ? (
             <div>
               <p className="text-sm font-medium uppercase tracking-wide text-green-300">{t("recreating", lang)}</p>
               <h1 className="mt-1 text-4xl font-semibold tracking-tight">{recipe.title}</h1>
@@ -365,16 +410,34 @@ export function ShootFlow({ recipe, onExit, round }: { recipe?: Recipe; onExit?:
                 {t(problem, lang)}
               </p>
             )}
-            <button type="button" className={primary} onClick={() => startCamera(facing)}>
-              {t("openCamera", lang)}
-            </button>
-            <label className={`${secondary} cursor-pointer focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-white`}>
-              {t("usePicture", lang)}
-              <input type="file" accept="image/*" className="sr-only" onChange={(event) => choosePicture(event.currentTarget)} />
-            </label>
-            <p className="text-center text-xs text-neutral-400">
-              {t(recipe ? (recipe.idea.subject ? "privacyRecipe" : "privacyRecipeGuided") : "privacy", lang)}
-            </p>
+            {demo ? (
+              <>
+                <button type="button" className={primary} onClick={startDemo}>
+                  {t("demoStart", lang)}
+                </button>
+                <Link href="/shoot" className={secondary}>
+                  {t("tryReal", lang)}
+                </Link>
+              </>
+            ) : (
+              <>
+                <button type="button" className={primary} onClick={() => startCamera(facing)}>
+                  {t("openCamera", lang)}
+                </button>
+                <label className={`${secondary} cursor-pointer focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-white`}>
+                  {t("usePicture", lang)}
+                  <input type="file" accept="image/*" className="sr-only" onChange={(event) => choosePicture(event.currentTarget)} />
+                </label>
+                {problem && DEMO_HINT.includes(problem) && (
+                  <Link href="/demo" className={demoLink}>
+                    {t("watchDemo", lang)}
+                  </Link>
+                )}
+                <p className="text-center text-xs text-neutral-400">
+                  {t(recipe ? (recipe.idea.subject ? "privacyRecipe" : "privacyRecipeGuided") : "privacy", lang)}
+                </p>
+              </>
+            )}
           </div>
         </section>
       )}
@@ -385,6 +448,7 @@ export function ShootFlow({ recipe, onExit, round }: { recipe?: Recipe; onExit?:
             <button type="button" className={pill} onClick={leaveSource}>
               {t("back", lang)}
             </button>
+            {demo && <span className={demoTag}>{t("demoBadge", lang)}</span>}
             <LangToggle />
             {modeButton}
             {voiceButton}
@@ -404,7 +468,7 @@ export function ShootFlow({ recipe, onExit, round }: { recipe?: Recipe; onExit?:
               </div>
             )}
             <button type="button" className={primary} onClick={recipe ? startRecipe : readScene}>
-              {t(recipe ? "startRecipe" : "readScene", lang)}
+              {t(recipe ? "startRecipe" : demo ? "demoRead" : "readScene", lang)}
             </button>
           </div>
         </section>
@@ -425,13 +489,22 @@ export function ShootFlow({ recipe, onExit, round }: { recipe?: Recipe; onExit?:
             <div className="flex items-center justify-between gap-2 px-4 pb-3">
               <h2 className="text-2xl font-semibold">{t("pickShot", lang)}</h2>
               <span className="flex items-center gap-2">
-                {mock && <span className={sampleTag}>{t("sample", lang)}</span>}
+                {demo ? <span className={demoTag}>{t("demoBadge", lang)}</span> : mock && <span className={sampleTag}>{t("sample", lang)}</span>}
                 <button type="button" className={pill} onClick={() => setStep("camera")}>
                   {t("back", lang)}
                 </button>
               </span>
             </div>
-            {mock && <p className="px-4 pb-3 text-sm leading-snug text-amber-200">{t("sampleIdeasNote", lang)}</p>}
+            {mock && (
+              <div className="grid gap-1 px-4 pb-3">
+                <p className="text-sm leading-snug text-amber-200">{t(demo ? "demoIdeasNote" : "sampleIdeasNote", lang)}</p>
+                {!demo && (
+                  <Link href="/demo" className="text-sm text-neutral-300 underline underline-offset-4">
+                    {t("watchDemo", lang)}
+                  </Link>
+                )}
+              </div>
+            )}
             <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-2">
               {plan.ideas.map((item) => (
                 <IdeaCard key={item.id} idea={item} lang={lang} onUse={() => choose(item)} />
@@ -450,6 +523,7 @@ export function ShootFlow({ recipe, onExit, round }: { recipe?: Recipe; onExit?:
               </button>
               {voiceButton}
               {modeButton}
+              {demo && <span className={demoTag}>{t("demoBadge", lang)}</span>}
             </div>
             <ScoreRing score={session.score} />
           </div>
@@ -461,6 +535,7 @@ export function ShootFlow({ recipe, onExit, round }: { recipe?: Recipe; onExit?:
           )}
 
           <div className="grid gap-3">
+            {demo && <p className="rounded-xl bg-black/70 px-3 py-2 text-center text-sm text-amber-200">{t("demoCoachNote", lang)}</p>}
             <p
               className="rounded-2xl bg-black/60 px-4 py-3 text-center text-2xl font-semibold leading-snug backdrop-blur"
               aria-live="polite"
@@ -481,6 +556,7 @@ export function ShootFlow({ recipe, onExit, round }: { recipe?: Recipe; onExit?:
 
       {step === "result" && shot && idea && (
         <section className="absolute inset-0 overflow-y-auto bg-neutral-950 p-4 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(2rem,env(safe-area-inset-bottom))]">
+          {demo && <p className="mb-3"><span className={demoTag}>{t("demoBadge", lang)}</span></p>}
           {recipe && <h1 className="mb-3 text-xl font-semibold leading-tight">{recipe.title}</h1>}
 
           <div className="grid grid-cols-2 gap-3">
@@ -525,7 +601,7 @@ export function ShootFlow({ recipe, onExit, round }: { recipe?: Recipe; onExit?:
           <div className={`mt-4 ${card}`}>
             <h2 className="flex flex-wrap items-center justify-between gap-2 text-lg font-semibold">
               {t("improved", lang)}
-              {review?.mock && <span className={sampleTag}>{t("sampleReview", lang)}</span>}
+              {review?.mock && <span className={sampleTag}>{t(demo ? "demoReviewNote" : "sampleReview", lang)}</span>}
             </h2>
             {review ? (
               <>
@@ -554,7 +630,7 @@ export function ShootFlow({ recipe, onExit, round }: { recipe?: Recipe; onExit?:
             )}
           </div>
 
-          <p className="mt-3 text-center text-xs text-neutral-400">{t("realPhoto", lang)}</p>
+          <p className="mt-3 text-center text-xs text-neutral-400">{t(demo ? "demoPhotoNote" : "realPhoto", lang)}</p>
 
           <div className="mt-4 grid gap-3">
             <button type="button" className={primary} onClick={share}>
@@ -566,8 +642,13 @@ export function ShootFlow({ recipe, onExit, round }: { recipe?: Recipe; onExit?:
               </button>
             )}
             <button type="button" className={secondary} onClick={() => setStep("camera")}>
-              {t(recipe ? "shootAgain" : "newScene", lang)}
+              {t(demo ? "demoAgain" : recipe ? "shootAgain" : "newScene", lang)}
             </button>
+            {demo && (
+              <Link href="/shoot" className={secondary}>
+                {t("tryReal", lang)}
+              </Link>
+            )}
             {recipe && onExit && (
               <button type="button" className={secondary} onClick={onExit}>
                 {t("backToRecipe", lang)}
@@ -575,15 +656,24 @@ export function ShootFlow({ recipe, onExit, round }: { recipe?: Recipe; onExit?:
             )}
           </div>
 
-          {!recipe && (
-            <div className="mt-6">
-              <RecipePublisher key={captures} idea={idea} sample={mock} lang={lang} />
+          {demo ? (
+            <div className="mt-6 grid gap-2 text-sm leading-snug text-neutral-300" data-testid="demo-disabled">
+              <p className={card}>{t("demoNoRecipe", lang)}</p>
+              <p className={card}>{t("demoNoFeedback", lang)}</p>
             </div>
-          )}
+          ) : (
+            <>
+              {!recipe && (
+                <div className="mt-6">
+                  <RecipePublisher key={captures} idea={idea} sample={mock} lang={lang} />
+                </div>
+              )}
 
-          <div className="mt-8">
-            <FeedbackForm key={captures} lang={lang} round={round} />
-          </div>
+              <div className="mt-8">
+                <FeedbackForm key={captures} lang={lang} round={round} />
+              </div>
+            </>
+          )}
         </section>
       )}
     </main>
