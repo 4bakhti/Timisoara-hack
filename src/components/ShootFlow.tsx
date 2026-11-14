@@ -113,6 +113,8 @@ export function ShootFlow({ recipe, onExit }: { recipe?: Recipe; onExit?: () => 
   };
 
   const handleCapture = (captured: CapturedShot) => {
+    // A photo that arrives after the user has left coaching belongs to nothing on screen.
+    if (step !== "coach") return;
     setShot(captured);
     setCaptures((count) => count + 1);
     setStep("result");
@@ -370,7 +372,9 @@ export function ShootFlow({ recipe, onExit }: { recipe?: Recipe; onExit?: () => 
               {t("usePicture", lang)}
               <input type="file" accept="image/*" className="sr-only" onChange={(event) => choosePicture(event.currentTarget)} />
             </label>
-            <p className="text-center text-xs text-neutral-400">{t(recipe ? "privacyRecipe" : "privacy", lang)}</p>
+            <p className="text-center text-xs text-neutral-400">
+              {t(recipe ? (recipe.idea.subject ? "privacyRecipe" : "privacyRecipeGuided") : "privacy", lang)}
+            </p>
           </div>
         </section>
       )}

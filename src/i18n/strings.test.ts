@@ -1,3 +1,4 @@
+import QRCode from "qrcode";
 import { describe, expect, it } from "vitest";
 import { qrPath } from "@/components/QrCode";
 import { isLocalOnly } from "@/components/ShareLink";
@@ -54,6 +55,29 @@ describe("share links", () => {
     // The top-left finder pattern starts right after the quiet zone.
     expect(drawn!.path.startsWith("M4,4h1v1h-1z")).toBe(true);
     expect(qrPath("x".repeat(5000))).toBeNull();
+  });
+
+  it("draws exactly the squares the QR library's own renderer draws", async () => {
+    const url = "https://example.test/r/abc123";
+    const mine = new Set([...qrPath(url)!.path.matchAll(/M(\d+),(\d+)h1v1h-1z/g)].map((m) => `${m[1]},${m[2]}`));
+
+    // The library draws each row as horizontal strokes: "M4 4.5h7m1 0h1…". Same margin of four.
+    const svg = await QRCode.toString(url, { type: "svg", errorCorrectionLevel: "M", margin: 4 });
+    const strokes = /stroke="#000000" d="([^"]+)"/.exec(svg)![1];
+    const theirs = new Set<string>();
+    let x = 0;
+    let y = 0;
+    for (const [, command, args] of strokes.matchAll(/([Mmh])([-\d. ]+)/g)) {
+      const numbers = args.trim().split(/\s+/).map(Number);
+      if (command === "M") [x, y] = [numbers[0], Math.floor(numbers[1])];
+      else if (command === "m") [x, y] = [x + numbers[0], y + (numbers[1] ?? 0)];
+      else {
+        for (let i = 0; i < numbers[0]; i++) theirs.add(`${x + i},${y}`);
+        x += numbers[0];
+      }
+    }
+    expect(mine.size).toBeGreaterThan(100);
+    expect([...mine].sort()).toEqual([...theirs].sort());
   });
 
   it("knows which addresses only work on this device", () => {

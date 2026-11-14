@@ -3,9 +3,10 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CapturedShot, CoachSessionOptions } from "@/coach";
 import { ShootFlow } from "@/components/ShootFlow";
-import { HEALTH_NO_DB, TEST_RECIPE } from "@/components/test-fixtures";
+import { deferred, HEALTH_NO_DB, TEST_IDEA_NO_PERSON, TEST_RECIPE } from "@/components/test-fixtures";
 import { t } from "@/i18n/strings";
 import { api } from "@/lib/api";
+import type { ReviewResponse } from "@/lib/contracts";
 import { SAMPLE_PLAN_PERSON, sampleReview } from "@/lib/fixtures";
 import { setLang } from "@/state/lang";
 
@@ -173,7 +174,73 @@ describe("ShootFlow: a picture instead of the camera", () => {
   });
 });
 
+describe("ShootFlow: answers that arrive late", () => {
+  it("keeps the current shot's review when an earlier shot's review arrives afterwards", async () => {
+    analyze.mockResolvedValue({ plan: SAMPLE_PLAN_PERSON });
+    const reviewA = deferred<ReviewResponse>();
+    const reviewB = deferred<ReviewResponse>();
+    review.mockReset();
+    review.mockReturnValueOnce(reviewA.promise).mockReturnValueOnce(reviewB.promise);
+    const answer = (text: string): ReviewResponse => ({ improved: [text], lesson: { title: `${text} lesson`, text: `${text} text` } });
+
+    render(<ShootFlow />);
+    choosePicture();
+    fireEvent.click(button(t("readScene", "en")));
+    await screen.findByText(t("pickShot", "en"));
+
+    // Shot A: its review stays out.
+    fireEvent.click(screen.getAllByRole("button", { name: t("useShot", "en") })[0]);
+    act(() => button(t("shutter", "en")).click());
+    await waitFor(() => expect(review).toHaveBeenCalledTimes(1));
+
+    // Shot B, with another idea: its review comes back first.
+    fireEvent.click(button(t("another", "en")));
+    fireEvent.click(screen.getAllByRole("button", { name: t("useShot", "en") })[1]);
+    act(() => button(t("shutter", "en")).click());
+    await waitFor(() => expect(review).toHaveBeenCalledTimes(2));
+    expect(review.mock.calls[1][0].idea).toEqual(SAMPLE_PLAN_PERSON.ideas[1]);
+    await act(async () => reviewB.resolve(answer("Review B")));
+    expect(await screen.findByText("Review B")).toBeTruthy();
+
+    // Now the old one lands. It must not replace what is on screen.
+    await act(async () => reviewA.resolve(answer("Review A")));
+    expect(screen.getByText("Review B")).toBeTruthy();
+    expect(screen.queryByText("Review A")).toBeNull();
+  });
+
+  it("ignores a photo delivered after the user went back from coaching", async () => {
+    analyze.mockResolvedValue({ plan: SAMPLE_PLAN_PERSON });
+    render(<ShootFlow />);
+    choosePicture();
+    fireEvent.click(button(t("readScene", "en")));
+    await screen.findByText(t("pickShot", "en"));
+    fireEvent.click(screen.getAllByRole("button", { name: t("useShot", "en") })[0]);
+    fireEvent.click(button(t("back", "en")));
+    await screen.findByText(t("pickShot", "en"));
+
+    // A stopped session that still fires reaches the screen through the hook's latest callback.
+    const late: CapturedShot = {
+      blob: new Blob(["late"]),
+      dataUrl: AFTER,
+      width: 3,
+      height: 4,
+      score: { total: 1, framing: null, level: null, pose: null, crop: null, light: null },
+      manual: true,
+    };
+    act(() => coach.options!.onCapture(late));
+    expect(screen.getByText(t("pickShot", "en"))).toBeTruthy();
+    expect(screen.queryByText(t("improved", "en"))).toBeNull();
+    expect(review).not.toHaveBeenCalled();
+  });
+});
+
 describe("ShootFlow: recreating a recipe", () => {
+  it("says up front that a shot without a person sends frames while the coach runs", () => {
+    render(<ShootFlow recipe={{ ...TEST_RECIPE, idea: TEST_IDEA_NO_PERSON }} />);
+    expect(screen.getByText(t("privacyRecipeGuided", "en"))).toBeTruthy();
+    expect(screen.queryByText(t("privacyRecipe", "en"))).toBeNull();
+  });
+
   it("coaches the recipe's idea without reading the scene, and compares photos only when asked", async () => {
     const onExit = vi.fn();
     render(<ShootFlow recipe={TEST_RECIPE} onExit={onExit} />);

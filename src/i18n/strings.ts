@@ -53,6 +53,10 @@ export const STRINGS = {
     en: "Nothing leaves your phone while you line up the shot. Photos are sent only if you ask to compare them afterwards.",
     ro: "Nimic nu pleacă de pe telefon cât timp pregătești cadrul. Fotografiile sunt trimise doar dacă ceri apoi să fie comparate.",
   },
+  privacyRecipeGuided: {
+    en: "This shot has no person to track, so while the coach runs, small frames from the camera are sent to the server to check the framing. Nothing is sent before you start the coach.",
+    ro: "Acest cadru nu are o persoană de urmărit, așa că, în timp ce antrenorul rulează, cadre mici de la cameră sunt trimise la server pentru a verifica încadrarea. Nimic nu este trimis înainte să pornești antrenorul.",
+  },
   readScene: { en: "Read my scene", ro: "Citește scena" },
   reading1: { en: "Finding the light…", ro: "Caut lumina…" },
   reading2: { en: "Checking the background…", ro: "Verific fundalul…" },
