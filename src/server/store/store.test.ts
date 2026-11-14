@@ -84,7 +84,7 @@ function storeBehavior(makeStore: () => Promise<Store>) {
 
 describe("withLibpqSslMode", () => {
   it("gives sslmode=require its libpq meaning and leaves the rest of the address untouched", () => {
-    const tiger = "postgres://tsdbadmin:p%40ss@abc.tsdb.cloud.timescale.com:35289/tsdb?sslmode=require";
+    const tiger = "postgres://tsdbadmin:p%40ss@abc.tsdb.cloud.timescale.com:5432/tsdb?sslmode=require";
     expect(withLibpqSslMode(tiger)).toBe(`${tiger}&uselibpqcompat=true`);
     expect(withLibpqSslMode("postgres://u:p@h/db?sslmode=prefer")).toBe("postgres://u:p@h/db?sslmode=prefer&uselibpqcompat=true");
   });
