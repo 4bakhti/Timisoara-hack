@@ -6,7 +6,7 @@ import { READY_SCORE } from "@/coach/brain";
 import { MemoryStore } from "./memory";
 import { firstReadyMs } from "./metrics";
 import { migrate } from "./migrations";
-import { createPool, PostgresStore } from "./postgres";
+import { createPool, PostgresStore, withLibpqSslMode } from "./postgres";
 import { newRecipeId } from "./recipes";
 import type { Store } from "./types";
 
@@ -81,6 +81,25 @@ function storeBehavior(makeStore: () => Promise<Store>) {
     expect((await store.listRecipes({ lat: 45.75, lng: 21.23 })).map(item => item.id)).toEqual([near.id, far.id, missing.id]);
   });
 }
+
+describe("withLibpqSslMode", () => {
+  it("gives sslmode=require its libpq meaning and leaves the rest of the address untouched", () => {
+    const tiger = "postgres://tsdbadmin:p%40ss@abc.tsdb.cloud.timescale.com:35289/tsdb?sslmode=require";
+    expect(withLibpqSslMode(tiger)).toBe(`${tiger}&uselibpqcompat=true`);
+    expect(withLibpqSslMode("postgres://u:p@h/db?sslmode=prefer")).toBe("postgres://u:p@h/db?sslmode=prefer&uselibpqcompat=true");
+  });
+
+  it("keeps full checking, an explicit choice, no TLS mode and unreadable addresses as they are", () => {
+    for (const address of [
+      "postgres://u:p@h/db?sslmode=verify-full",
+      "postgres://u:p@h/db?sslmode=require&uselibpqcompat=false",
+      "postgres://u:p@h/db",
+      "not a url",
+    ]) {
+      expect(withLibpqSslMode(address)).toBe(address);
+    }
+  });
+});
 
 describe("MemoryStore", () => {
   storeBehavior(async () => new MemoryStore());

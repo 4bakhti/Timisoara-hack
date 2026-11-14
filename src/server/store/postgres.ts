@@ -3,8 +3,35 @@ import { Recipe, type EventsRequest, type FeedbackRequest, type Stats } from "@/
 import { firstReadyMs, NO_VOTES } from "./metrics";
 import type { Position, Store, VersionStats } from "./types";
 
+/**
+ * In libpq, and in the address Tiger Data gives out, sslmode=require means
+ * "encrypt, but do not check the certificate". node-postgres 8 checks it fully
+ * instead, and Tiger's certificates come from Timescale's own CA
+ * (ca.timescale.com), which Node does not know, so every connection failed with
+ * SELF_SIGNED_CERT_IN_CHAIN. Ask the driver for the libpq meaning unless the
+ * address already decides. sslmode=verify-full still checks the certificate
+ * (give it sslrootcert with Timescale's CA).
+ */
+export function withLibpqSslMode(connectionString: string): string {
+  let params: URLSearchParams;
+  try {
+    params = new URL(connectionString).searchParams;
+  } catch {
+    return connectionString;
+  }
+  const mode = params.get("sslmode");
+  if ((mode !== "require" && mode !== "prefer") || params.has("uselibpqcompat")) return connectionString;
+  // Appended rather than re-serialised, so the rest of the address (and its password) stays byte for byte.
+  return `${connectionString}${connectionString.includes("?") ? "&" : "?"}uselibpqcompat=true`;
+}
+
 export function createPool(connectionString: string) {
-  const pool = new Pool({ connectionString, max: 3, connectionTimeoutMillis: 4000, statement_timeout: 8000 });
+  const pool = new Pool({
+    connectionString: withLibpqSslMode(connectionString),
+    max: 3,
+    connectionTimeoutMillis: 4000,
+    statement_timeout: 8000,
+  });
   // A network failure on an idle connection must not crash the server or log credentials.
   pool.on("error", () => {});
   return pool;
