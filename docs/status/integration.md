@@ -1,6 +1,6 @@
 # Integration: status
 
-Updated: Sat 14 Nov, 20:00. `main` at the commit that adds this file.
+Updated: Sat 14 Nov, 21:15. `main` at the commit that adds this file.
 
 ## Merged into `main`, in order
 
@@ -18,6 +18,7 @@ Updated: Sat 14 Nov, 20:00. `main` at the commit that adds this file.
 | 10 | Integrator fixes after testing the merged app: 3D forward lean measured but not judged yet; device voice straight away for two minutes after the server voice fails | `754ce9b` |
 | 11 | `quality/release-readiness` (the corrected no-reply tip): quality review Q1–Q5, phone acceptance protocol, user pilot protocol, lifecycle regression checks | `e41711c` |
 | 12 | Quality follow-up: before and after totals over the same measured parts (Q5); the lifecycle checks run in `npm run test`; re-check of Q1–Q5 in `docs/status/quality.md` | `f5060a4`, `98a1d99` |
+| 13 | Tiger Data connected: `sslmode=require` gets its libpq meaning (Tiger's certificates come from Timescale's own CA, so every connection had failed); credential downloads ignored by git; honest empty-recipes wording | the commit that adds this line |
 
 **Do not merge `codex-2/storage-recipes` again.** Its last commit (`8969107`) was signed with a personal e-mail address. Its changes are already in `main`, re-committed unchanged as `5204a11` under the GitHub no-reply address. Merging the branch would add nothing but that address to the history.
 
@@ -60,16 +61,16 @@ Verified on localhost after the merges (desktop browser; test photos fed to `/la
 | 3D body turn | 7° for a person facing the camera; −14° to −21° and +31° to +35° for the half-body photo and its mirror |
 | Face size limit | The face is found in half-body framing; in a full-length photo it is too small, so no face cues appear (nothing breaks) |
 | Server voice | At 17:30 ElevenLabs refused with a payment problem; the device voice took over, and after step 10 the app asked the server once, then not again for two minutes. At 20:00, after the account was fixed, `/api/speak` answered with real audio in English (1.3 s) and Romanian (0.2 s) |
-| Recipes and stats with the placeholder `DATABASE_URL` | The new honest screens: "The recipe list is not available" and "The numbers are not available", each with Try again. The routes answer 503 `storage_unavailable`; `/api/health` still says "database" because it only checks that the variable is set |
+| Tiger Data (21:00) | Service in AWS Frankfurt (0.5 CPU, TimescaleDB 2.32). Both migrations applied; `coach_events` is a hypertable on `recorded_at` (7-day chunks). The 7 PostgreSQL store tests pass against it in a throwaway schema, which was removed afterwards. `/api/recipes` and `/api/stats` answer 200 (about 0.05 s warm), an unknown recipe answers 404, and the pages show the real empty states. One connection attempt timed out once and the retry worked |
 | First start on this network | The pose model downloads from Google in 28 s (lite) or 41 s (full); later starts use the browser cache |
 
 Earlier checks: Gemini with the real key (scene reading 4–7 s in English and Romanian, honest review, guidance 1–2 s); storage routes in memory (idempotent events, feedback, measured-only stats, recipes with uses); the production server (judges' QR, `/shoot`, `/demo`).
 
-Not verified: a real phone or live camera, a deployed HTTPS address, a real PostgreSQL database, a real AI preview, and the Vultr scripts on a real server.
+Not verified: a real phone or live camera, a deployed HTTPS address, a real AI preview, and the Vultr scripts on a real server.
 
 ## Next
 
-- The team: set `DATABASE_URL` in `.env.local` to the real database (then `npm run db:migrate`) or leave it empty for memory storage; add image quota to the Gemini key for previews.
+- The team: put the same `DATABASE_URL` on the deploy server (the tables already exist); add image quota to the Gemini key for previews.
 - Before judging, open the app once on each demo phone so the tracking models are cached (the first download is slow on a busy network), or serve the model files from `public/mediapipe/` on the server.
 - Phone tests: run `docs/quality/PHONE-TEST.md` on the deployed build, plus on `/lab/live` the face cues near a match, the closed-eyes pause, the three-quarter turn, and a forward-lean calibration (stand straight, lean in, note the readings).
 - Still open from the quality review: Q5's mirrored front-camera coordinates for off-centre framing (needs a phone).

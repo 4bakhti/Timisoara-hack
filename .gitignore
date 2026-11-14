@@ -4,6 +4,9 @@
 !.env.example
 *.pem
 *.key
+# Credential files downloaded from Tiger Data (they hold the database password)
+tiger-cloud-*-credentials.*
+*-credentials.txt
 
 # Dependencies
 /node_modules

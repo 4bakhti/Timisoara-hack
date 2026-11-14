@@ -355,8 +355,8 @@ export const STRINGS = {
   recipesLoading: { en: "Loading recipes…", ro: "Se încarcă rețetele…" },
   recipesEmpty: { en: "No public recipes to show.", ro: "Nu există rețete publice de afișat." },
   recipesEmptyWhy: {
-    en: "Either none have been published yet, or the recipe service is not available on this server. The app cannot tell which.",
-    ro: "Fie nu a fost publicată încă niciuna, fie serviciul de rețete nu este disponibil pe acest server. Aplicația nu poate ști care dintre ele.",
+    en: "The recipe service answered: nobody has published a recipe yet.",
+    ro: "Serviciul de rețete a răspuns: nimeni nu a publicat încă o rețetă.",
   },
   makeFirst: { en: "Take a photo and publish one", ro: "Fă o fotografie și publică una" },
   sortNear: { en: "Sort by distance from me", ro: "Ordonează după distanța față de mine" },
