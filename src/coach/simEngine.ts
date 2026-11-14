@@ -128,7 +128,7 @@ export function createSimEngine(cfg: EngineConfig): Engine {
     } else {
       const afterCoach = t - LOADING_MS - SEARCHING_MS - COACHING_MS;
       lastScore = 91;
-      if (afterCoach < HOLD_MS) {
+      if (afterCoach < HOLD_MS || cfg.autoCapture === false) {
         cfg.emit({ phase: "holding", score: 91, instruction: instruction("hold"), countdown: null });
         speak("hold", "countdown");
       } else {

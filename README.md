@@ -1,57 +1,50 @@
 # Framewise
 
-**A camera coach in your phone's browser.** Point it at any scene, pick one of three shots it suggests, and it coaches both the photographer and the person in the photo, live and by voice, until the shot matches. Then it takes the photo and shows you what improved.
+**A simple camera with live pose guidance.** Open the camera, follow the outline and movement arrow, and press the shutter. No idea cards, analysis button or results questionnaire.
 
 Built at UNIHACK 8, Timișoara (13–15 November 2026), by team Civicore · track *Solve Your Own Problem*.
 
-## The problem
-
-Most photos of us are taken by someone else: a friend, a stranger, a phone propped on a wall. They come out badly not for lack of a good camera, but because nobody knows **where to stand, how to pose, or how to frame** for that particular place and light. Advice online is generic, and the person being photographed can't see the screen.
-
 ## What it does
 
-1. **Read.** Open it in any phone browser, nothing to install, and point the camera at the scene.
-2. **Suggest.** Gemini reads the light, background and free space and proposes **three different shots for this exact scene**, each naming what it uses ("window light from the left", "plain wall") and what to keep out of frame.
-3. **Coach.** Pick one. The phone tracks the body **on the device**, up to 30 times a second, compares the pose and position with the shot, and gives **one correction at a time**: on screen for the photographer, spoken for the person posing, in English or Romanian. Solo mode works with the phone propped up.
-4. **Capture.** When pose and framing match, it says "hold", counts down and takes the photo itself. **The photo is always a real capture, never generated or edited.**
-5. **Learn and share.** You see before and after with a score and what improved. A good shot can be published as a **recipe**: a link and QR code that coach the next person to recreate it.
+1. Opens directly into the camera, with a photo-upload fallback.
+2. Gemini chooses **one pose** from the current frame, based on the visible person, light, posture and setting.
+3. MediaPipe tracks the body on the device. A light outline and one arrow show where to move; the outline turns green when the pose matches.
+4. The shutter takes an unedited photo whenever you choose. Tap its thumbnail to save or share it.
+
+Icon controls toggle pose guidance, optional spoken corrections, a composition grid and the front/rear camera. The preview preserves the source aspect ratio, including in landscape. Guidance never triggers an automatic capture in the main camera.
 
 ## How it works
 
 ```mermaid
 flowchart LR
-  Cam[Phone camera] -->|one frame, on tap| A["/api/analyze<br/>Gemini, structured JSON"]
-  A -->|3 shot ideas + target box + pose| UI[Idea cards]
-  UI -->|chosen idea| C[Coach on the device]
-  Cam -->|up to 30 fps| T[MediaPipe pose tracking]
+  Cam[Camera or photo] -->|automatic frame| A["/api/pose · Gemini"]
+  A -->|one validated pose| C[On-device coach]
+  Cam --> T[MediaPipe tracking]
   T --> C
-  C -->|one correction| V[Voice: ElevenLabs or the phone's own]
-  C -->|match, hold, 3-2-1| S[Real capture + score]
-  S --> R["/api/review<br/>Gemini: what improved"]
-  S --> P["Recipes, feedback, stats<br/>PostgreSQL / Tiger Data"]
+  C --> G[Outline + movement arrow]
+  C --> V[Optional spoken correction]
+  Cam -->|manual shutter| S[Real photo · save or share]
 ```
 
-- **Planning (Gemini).** The model must answer with JSON that matches a strict schema (`src/lib/contracts.ts`), including the target box the coach steers toward. The answer is validated, retried once with the validation errors, and falls back to a second fast model when the first is overloaded. Sample data is always labelled as such.
-- **Coaching (on the device).** Pose matching uses joint angles, so it doesn't matter how far away the person stands. Framing compares the body's position and size with the target box. A rules engine picks the single most useful correction, waits until it is stable before switching, paces what it says, and never repeats itself straight away.
-- **Voice (ElevenLabs).** Corrections are spoken with ElevenLabs text-to-speech (Flash v2.5, English and Romanian), falling back to the phone's own voice. An optional voice conversation lets you say "next idea", "pause" or "take it", through the same safe paths as the buttons.
-- **Data (PostgreSQL / Tiger Data).** Usage numbers, feedback and recipes are stored in PostgreSQL. With TimescaleDB available, coach events become a hypertable, and a continuous aggregate rolls the live coaching samples up by hour for the results page (real-time, refreshed every 15 minutes). Verified on Tiger Data. Without a database the app uses clearly labelled temporary storage.
-- **Honest results.** `/stats` shows only measured numbers per app version (sessions, time to match, score gain, ratings) and says "not measured" instead of inventing zeros. An hour-by-hour chart of coaching sessions, with average live score and frame rate, says where its numbers come from.
+The chosen pose stays steady while you follow it. Every 20 seconds a small local image comparison checks for a changed scene; only a changed scene, an empty scene or a failed request triggers another server request. If Gemini is unavailable, the camera keeps working and the guidance icon indicates the problem. It never silently substitutes a sample pose.
 
 ## Try it
 
 | Page | What it shows |
 |---|---|
-| `/shoot` | The app: camera, ideas, coaching, result |
-| `/demo` | The whole flow on a drawn scene with no camera, network or AI (labelled as a demo) |
-| `/recipes`, `/r/<id>` | Shared shot recipes with QR codes |
-| `/stats` | Results from user testing, by app version |
-| `/lab` | Developer pages: the pose library, live tracking, single-picture tests |
+| `/`, `/shoot` | The simplified pose camera |
+| `/demo` | The same camera UI on a labelled sample scene, with a fixed sample target and no Gemini calls; tracking assets may require a download |
+| `/recipes`, `/r/<id>` | Existing shared recipes and their separate recreation flow |
+| `/stats` | Existing coaching measurements; the new direct shutter does not yet report capture outcomes here |
+| `/lab` | Developer pages for the pose library and tracking |
 
 ## Privacy
 
-- A photo leaves the phone only when you tap **Read my scene**, and for the before/after review. Photos are not stored.
-- The coach talks about **pose, light and framing only**, never about bodies or looks.
-- Feedback and usage numbers contain no personal data. Recipe locations are optional and rounded.
+- While guidance is enabled, a reduced frame is sent automatically to Gemini to choose a pose. Turn off the person icon to stop those requests. Photos are not stored by this app's pose endpoint.
+- Continuous body tracking runs on the device. Backgrounding the page or opening the captured-photo preview stops the camera and guidance requests.
+- Captured photos stay in memory on the device until you save/share them. Download photos you want to keep before closing the page.
+- The camera requests no microphone access. Optional spoken corrections use the existing ElevenLabs/device voice path.
+- Keys and database credentials belong in ignored `.env.local` or server environment variables, never Git.
 
 ## Run it
 

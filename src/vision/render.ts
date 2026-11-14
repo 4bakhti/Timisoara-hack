@@ -93,6 +93,7 @@ export function placeTemplate(points: PosePoints, box: Box, map: ViewMap): Recor
 }
 
 export interface GuideFrame {
+  minimal?: boolean;
   map: ViewMap;
   /** Where the subject should be, in normalised image coordinates. */
   targetBox?: Box;
@@ -239,6 +240,10 @@ function figureFor(points: PosePoints, box: Box, aspect: number): SilhouetteMask
 export function drawGuides(ctx: CanvasRenderingContext2D, frame: GuideFrame): void {
   const { map } = frame;
   ctx.clearRect(0, 0, map.viewW, map.viewH);
+  if (frame.minimal) {
+    drawMinimalGuide(ctx, frame);
+    return;
+  }
   const score = frame.score ?? 0;
   const matched = frame.matched ?? score >= MATCH_SCORE;
   const t = greenness(score, matched);
@@ -252,6 +257,71 @@ export function drawGuides(ctx: CanvasRenderingContext2D, frame: GuideFrame): vo
   if (frame.silhouette) drawLiveOutline(ctx, frame.silhouette, map, t);
   if (frame.live) drawLiveSkeleton(ctx, frame.live, map, matched, frame.highlight ?? []);
   if (typeof frame.levelErrorDeg === "number") drawLevel(ctx, frame.levelErrorDeg, map);
+}
+
+const LIMB_POINTS: Record<Limb, PosePointName[]> = {
+  leftArm: ["lElbow", "lWrist"], rightArm: ["rElbow", "rWrist"],
+  leftLeg: ["lKnee", "lAnkle"], rightLeg: ["rKnee", "rAnkle"],
+  torso: ["lShoulder", "rShoulder"], head: ["nose"],
+};
+
+/** One arrow, attached to the visible joint with the largest useful correction. */
+export function movementArrow(frame: GuideFrame): { from: Point2; to: Point2 } | null {
+  const box = frame.ghostBox ?? frame.targetBox;
+  if (!frame.ghost || !box || !frame.live || frame.matched) return null;
+  const target = placeTemplate(frame.ghost, box, frame.map);
+  let result: { from: Point2; to: Point2 } | null = null;
+  let largest = 14;
+  for (const limb of frame.highlight ?? []) {
+    for (const key of LIMB_POINTS[limb]) {
+      const live = frame.live[key];
+      if (!live) continue;
+      const from: Point2 = [frame.map.x(live[0]), frame.map.y(live[1])];
+      const to = target[key];
+      if ([from, to].some(([x, y]) => x < 0 || y < 0 || x > frame.map.viewW || y > frame.map.viewH)) continue;
+      const distance = Math.hypot(to[0] - from[0], to[1] - from[1]);
+      if (distance > largest) { largest = distance; result = { from, to }; }
+    }
+  }
+  return result;
+}
+
+function drawMinimalGuide(ctx: CanvasRenderingContext2D, frame: GuideFrame): void {
+  // Never show a fabricated person floating over an empty scene.
+  if (!frame.live || !frame.ghost || !frame.targetBox || !frame.ghostBox) return;
+  const { map } = frame;
+  const target = figureFor(frame.ghost, frame.targetBox, map.imgW / map.imgH);
+  const move = moveBetween(frame.targetBox, frame.ghostBox);
+  ctx.save();
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  ctx.shadowColor = "rgba(0,0,0,.7)";
+  ctx.shadowBlur = 4;
+  ctx.strokeStyle = frame.matched ? "#bbf7c0" : "rgba(255,255,255,.8)";
+  ctx.lineWidth = 1.8;
+  ctx.setLineDash(frame.matched ? [] : [5, 6]);
+  traceMask(ctx, target, map, move);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  const arrow = movementArrow(frame);
+  if (arrow) {
+    const { from, to } = arrow;
+    const angle = Math.atan2(to[1] - from[1], to[0] - from[0]);
+    ctx.strokeStyle = "#f7db7c";
+    ctx.fillStyle = "#f7db7c";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(from[0], from[1], 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(from[0], from[1]);
+    ctx.lineTo(to[0], to[1]);
+    ctx.moveTo(to[0] - 10 * Math.cos(angle - .5), to[1] - 10 * Math.sin(angle - .5));
+    ctx.lineTo(to[0], to[1]);
+    ctx.lineTo(to[0] - 10 * Math.cos(angle + .5), to[1] - 10 * Math.sin(angle + .5));
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 /** Moves normalised image points: identity, or from one box onto another. */

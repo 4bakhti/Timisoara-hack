@@ -110,6 +110,10 @@ export interface CoachSessionOptions {
   mirrored?: boolean;
   /** Speak corrections aloud. Call unlockAudio() from a tap first. */
   voice?: boolean;
+  /** false keeps guidance live until the user presses the shutter. */
+  autoCapture?: boolean;
+  /** Quiet overlay: a target outline and one movement arrow. */
+  minimalGuides?: boolean;
   /** Optional owner of both correction and countdown audio. */
   speech?: CoachSpeech;
   /**
@@ -148,6 +152,11 @@ export interface EngineConfig {
   lang: Lang;
   mirrored: boolean;
   voice: boolean;
+  /** false keeps guidance live until the user presses the shutter. */
+  autoCapture?: boolean;
+  /** Quiet overlay: a target outline and one movement arrow. */
+  minimalGuides?: boolean;
+  /** Optional owner of both correction and countdown audio. */
   speech?: CoachSpeech;
   target?: CustomTarget;
   emit: (patch: Partial<CoachState>) => void;

@@ -59,7 +59,7 @@ class CoachStore {
 }
 
 export function useCoachSession(options: CoachSessionOptions): CoachSession {
-  const { video, overlay, idea, mode, lang, speech, target, paused = false, engine: engineKind = "auto" } = options;
+  const { video, overlay, idea, mode, lang, speech, target, autoCapture, minimalGuides, paused = false, engine: engineKind = "auto" } = options;
   const still = video ? null : (options.still ?? null);
   const mirrored = options.mirrored ?? false;
   const voice = options.voice ?? true;
@@ -95,6 +95,8 @@ export function useCoachSession(options: CoachSessionOptions): CoachSession {
           voice,
           speech,
           target,
+          autoCapture,
+          minimalGuides,
           emit: (patch) => {
             const previous = store.get().phase;
             if ((previous === "holding" || previous === "countdown") &&
@@ -128,7 +130,7 @@ export function useCoachSession(options: CoachSessionOptions): CoachSession {
       engine?.stop();
       if (engineRef.current === engine) engineRef.current = null;
     };
-  }, [video, still, overlay, idea, mode, lang, mirrored, voice, speech, target, paused, engineKind, store, run]);
+  }, [video, still, overlay, idea, mode, lang, mirrored, voice, speech, target, autoCapture, minimalGuides, paused, engineKind, store, run]);
 
   const captureNow = useCallback(() => { void engineRef.current?.captureNow(); }, []);
   const requestCapture = useCallback(async (signal?: AbortSignal) => {

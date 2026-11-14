@@ -28,3 +28,25 @@ describe("coverMap", () => {
     expect(map.x(0)).toBeLessThan(0);
   });
 });
+
+import { movementArrow, placeTemplate, type GuideFrame } from "./render";
+import { getPoseTemplate } from "./poses/catalog";
+
+describe("minimal movement arrow", () => {
+  const map = coverMap(400, 600, 400, 600);
+  const ghost = getPoseTemplate("relaxed-stand").points;
+  const box = { x: .2, y: .1, w: .6, h: .8 };
+  const target = placeTemplate(ghost, box, map);
+  const base: GuideFrame = { map, ghost, targetBox: box, ghostBox: box, highlight: ["leftArm"], live: { lWrist: [target.lWrist[0] / 400 - .1, target.lWrist[1] / 600] } };
+  it("points from the actual joint to the target and disappears when matched", () => {
+    const arrow = movementArrow(base)!;
+    expect(arrow.to).toEqual(target.lWrist);
+    expect(arrow.to[0] - arrow.from[0]).toBeCloseTo(40);
+    expect(movementArrow({ ...base, matched: true })).toBeNull();
+  });
+  it("does not draw arrows for invisible joints, a different limb or subpixel changes", () => {
+    expect(movementArrow({ ...base, live: {} })).toBeNull();
+    expect(movementArrow({ ...base, highlight: ["rightArm"] })).toBeNull();
+    expect(movementArrow({ ...base, live: { lWrist: [target.lWrist[0] / 400 - .001, target.lWrist[1] / 600] } })).toBeNull();
+  });
+});

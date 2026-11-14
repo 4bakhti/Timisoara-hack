@@ -56,7 +56,7 @@ export function createPoseEngine(cfg: EngineConfig): Engine {
   // A pose that also works as an upper-body pose (tagged half-body) does not send a seated or close person back.
   const framingOptions = { halfBody: !cfg.target && getPoseTemplate(cfg.idea.subject?.poseTemplateId).tags.includes("half-body") };
   const box = cfg.target?.box ?? cfg.idea.framing.subjectBox;
-  const brain = new CoachBrain({ mode: cfg.mode, expectPose: Boolean(cfg.idea.subject), style: cfg.idea.style });
+  const brain = new CoachBrain({ mode: cfg.mode, expectPose: Boolean(cfg.idea.subject), style: cfg.idea.style, autoCapture: cfg.autoCapture });
   const recorder = createRecorder(cfg);
   const isVideo = cfg.source instanceof HTMLVideoElement;
 
@@ -116,6 +116,7 @@ export function createPoseEngine(cfg: EngineConfig): Engine {
     const size = sourceSize(cfg.source);
     drawGuides(ctx, {
       map: coverMap(size.width || view.width, size.height || view.height, view.width, view.height),
+      minimal: cfg.minimalGuides,
       targetBox: box,
       ghostBox: points ? (ghostBox ?? undefined) : undefined,
       ghost: cfg.idea.subject ? template.points : undefined,
@@ -230,8 +231,8 @@ export function createPoseEngine(cfg: EngineConfig): Engine {
       now,
       personVisible: visible,
       pose: measured.pose,
-      framing: measured.framing,
-      levelError,
+      framing: cfg.minimalGuides ? null : measured.framing,
+      levelError: cfg.minimalGuides ? null : levelError,
       face,
     });
     lastScore = decision.score;
@@ -284,7 +285,7 @@ export function createPoseEngine(cfg: EngineConfig): Engine {
       if (isVideo) {
         tracker = await createPoseTracker();
         // Optional: face tracking. Coaching works without it.
-        faceTracker = await createFaceTracker().catch(() => null);
+        if (!cfg.minimalGuides) faceTracker = await createFaceTracker().catch(() => null);
       } else {
         stillPose = (await getStillTracker()).detect(cfg.source as HTMLImageElement);
       }

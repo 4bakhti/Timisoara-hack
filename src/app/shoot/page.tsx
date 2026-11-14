@@ -1,10 +1,7 @@
-import { ShootFlow } from "@/components/ShootFlow";
-import { roundLabel } from "@/state/round";
+import { CameraScreen } from "@/components/camera/CameraScreen";
 
-export const metadata = { title: "Shoot" };
+export const metadata = { title: "Camera" };
 
-/** `/shoot?round=round-1` labels feedback from a user-testing round. Anything else is ignored. */
-export default async function ShootPage(props: PageProps<"/shoot">) {
-  const { round } = await props.searchParams;
-  return <ShootFlow round={roundLabel(round)} />;
+export default function ShootPage() {
+  return <CameraScreen />;
 }

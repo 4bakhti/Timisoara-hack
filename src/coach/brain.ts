@@ -47,6 +47,7 @@ export interface Decision {
 }
 
 export interface BrainOptions {
+  autoCapture?: boolean;
   mode: CoachMode;
   /** false for ideas without a pose: only framing and level are judged. */
   expectPose: boolean;
@@ -178,6 +179,14 @@ export class CoachBrain {
     if (faceCue) candidates.push({ id: faceCue, weight: 0 });
     const blocking = candidates.some((c) => c.weight >= BLOCKING_POSE_WEIGHT);
     const ready = this.score >= READY_SCORE && !blocking && !awaitingFaceCue;
+
+    // Native-camera mode: matching is a visual state, never a shutter command.
+    if (this.opts.autoCapture === false) {
+      this.phase = ready ? "holding" : "coaching";
+      this.chooseInstruction(ready ? [] : candidates, m.now);
+      speak ??= ready ? null : this.maybeSpeak(m.now);
+      return { ...base, phase: this.phase, score, instruction: ready ? null : this.current, speak };
+    }
 
     // --- capture sequence
     if (this.phase === "holding" || this.phase === "countdown") {

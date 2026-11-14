@@ -239,3 +239,16 @@ describe("CoachBrain", () => {
     expect(last.instruction).toBe("lost");
   });
 });
+
+describe("manual camera shutter", () => {
+  it("can hold a matching pose indefinitely without counting down or capturing", () => {
+    const brain = new CoachBrain({ mode: "solo", expectPose: true, autoCapture: false });
+    const result = run(brain, 0, 60_000, matched);
+    expect(result.last.phase).toBe("holding");
+    expect(result.decisions.every(d => !d.capture && d.countdown === null)).toBe(true);
+    expect(result.spoken).not.toContain("three");
+    const moved = run(brain, 60_100, 63_000, { ...visible, framing: goodFraming, pose: poseNeeds("bend_left_elbow") });
+    expect(moved.last.phase).toBe("coaching");
+    expect(moved.last.instruction).toBe("bend_left_elbow");
+  });
+});

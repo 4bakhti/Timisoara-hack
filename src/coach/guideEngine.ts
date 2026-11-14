@@ -148,7 +148,7 @@ export function createGuideEngine(cfg: EngineConfig): Engine {
         instruction = answer.fix ? customInstruction(answer.fix) : null;
         goodInARow = match >= READY_MATCH ? goodInARow + 1 : 0;
         recorder.sample(performance.now(), { score: match, framing: match, instruction: answer.fix ? "custom" : null });
-        if (goodInARow >= 2) {
+        if (goodInARow >= 2 && cfg.autoCapture !== false) {
           counting = true;
           instruction = toInstruction("hold", cfg);
           publish({ phase: "holding" });
