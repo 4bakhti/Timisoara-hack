@@ -10,7 +10,7 @@ import type { Lang } from "@/lib/contracts";
 const never = () => () => undefined;
 
 /** The page's own address, known only in the browser. */
-function useOrigin(): string | null {
+export function useOrigin(): string | null {
   return useSyncExternalStore(
     never,
     () => window.location.origin,

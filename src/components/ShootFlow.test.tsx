@@ -39,6 +39,11 @@ vi.mock("@/coach", () => ({
       simulated: false,
       error: null,
       captureNow: () => options.onCapture(shot),
+      requestCapture: async () => {
+        options.onCapture(shot);
+        return { ok: true as const, outcome: "captured" as const };
+      },
+      cancelPendingCapture: () => undefined,
       restart: () => undefined,
     };
   },
@@ -85,6 +90,7 @@ beforeEach(() => {
   analyze.mockReset();
   review.mockReset();
   createRecipe.mockReset();
+  vi.mocked(api.feedback).mockReset();
   vi.mocked(api.health).mockResolvedValue(HEALTH_NO_DB);
   review.mockResolvedValue({ ...sampleReview("en"), mock: true });
   setLang("en");
@@ -271,5 +277,90 @@ describe("ShootFlow: recreating a recipe", () => {
 
     fireEvent.click(button(t("backToRecipe", "en")));
     expect(onExit).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("ShootFlow: demo mode", () => {
+  it("runs on the drawing, the sample plan, the scripted coach and the sample review, with no calls to the server", async () => {
+    const { deviceSpeech } = await import("@/components/deviceSpeech");
+    const { DEMO_SCENE } = await import("@/components/ShootFlow");
+    const badge = () => screen.getAllByText(t("demoBadge", "en")).length;
+    render(<ShootFlow demo />);
+
+    expect(badge()).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: t("openCamera", "en") })).toBeNull();
+    fireEvent.click(button(t("demoStart", "en")));
+    expect(badge()).toBeGreaterThan(0);
+
+    fireEvent.click(button(t("demoRead", "en")));
+    expect(await screen.findByText(t("demoIdeasNote", "en"))).toBeTruthy();
+    expect(badge()).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getAllByRole("button", { name: t("useShot", "en") })[0]);
+    expect(coach.options?.engine).toBe("sim");
+    expect(coach.options?.still).toBe(DEMO_SCENE);
+    expect(coach.options?.speech).toBe(deviceSpeech);
+    expect(screen.getByText(t("demoCoachNote", "en"))).toBeTruthy();
+    expect(badge()).toBeGreaterThan(0);
+
+    act(() => button(t("shutter", "en")).click());
+    expect(await screen.findByText(t("demoReviewNote", "en"))).toBeTruthy();
+    expect(badge()).toBeGreaterThan(0);
+    expect(screen.getByText(t("demoPhotoNote", "en"))).toBeTruthy();
+    expect(screen.queryByText(t("realPhoto", "en"))).toBeNull();
+
+    // Recipes and feedback are off, with the reason.
+    expect(screen.getByText(t("demoNoRecipe", "en"))).toBeTruthy();
+    expect(screen.getByText(t("demoNoFeedback", "en"))).toBeTruthy();
+    expect(screen.queryByRole("button", { name: t("makeRecipe", "en") })).toBeNull();
+    expect(screen.queryByText(t("rate", "en"))).toBeNull();
+
+    expect(analyze).not.toHaveBeenCalled();
+    expect(review).not.toHaveBeenCalled();
+    expect(createRecipe).not.toHaveBeenCalled();
+    expect(api.feedback).not.toHaveBeenCalled();
+  });
+
+  it("is labelled in Romanian too", () => {
+    setLang("ro");
+    render(<ShootFlow demo />);
+    expect(screen.getAllByText(t("demoBadge", "ro")).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: t("demoStart", "ro") })).toBeTruthy();
+  });
+
+  it("is offered when the camera is refused, and when the scene could not be read", async () => {
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: { getUserMedia: vi.fn(async () => { throw new DOMException("denied", "NotAllowedError"); }) },
+    });
+    render(<ShootFlow />);
+    fireEvent.click(button(t("openCamera", "en")));
+    await screen.findByRole("alert");
+    expect(screen.getByRole("link", { name: t("watchDemo", "en") }).getAttribute("href")).toBe("/demo");
+    cleanup();
+
+    analyze.mockResolvedValue({ plan: SAMPLE_PLAN_PERSON, mock: true });
+    render(<ShootFlow />);
+    choosePicture();
+    fireEvent.click(button(t("readScene", "en")));
+    await screen.findByText(t("sampleIdeasNote", "en"));
+    expect(screen.getByRole("link", { name: t("watchDemo", "en") })).toBeTruthy();
+  });
+});
+
+describe("ShootFlow: test-round label", () => {
+  it("passes the round to the feedback it sends", async () => {
+    analyze.mockResolvedValue({ plan: SAMPLE_PLAN_PERSON });
+    vi.mocked(api.feedback).mockResolvedValue(true);
+    render(<ShootFlow round="round-1" />);
+    choosePicture();
+    fireEvent.click(button(t("readScene", "en")));
+    await screen.findByText(t("pickShot", "en"));
+    fireEvent.click(screen.getAllByRole("button", { name: t("useShot", "en") })[0]);
+    act(() => button(t("shutter", "en")).click());
+    fireEvent.click(await screen.findByRole("radio", { name: "4 out of 5" }));
+    fireEvent.click(button(t("sendFeedback", "en")));
+    await waitFor(() => expect(api.feedback).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(api.feedback).mock.calls[0][0]).toMatchObject({ rating: 4, round: "round-1" });
   });
 });

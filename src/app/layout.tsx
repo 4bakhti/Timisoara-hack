@@ -3,8 +3,12 @@ import { APP_NAME, APP_TAGLINE } from "@/lib/brand";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: APP_NAME,
-  description: APP_TAGLINE.en,
+  title: { default: APP_NAME, template: `%s · ${APP_NAME}` },
+  // One page serves both languages, so the description carries both.
+  description: `${APP_TAGLINE.en} / ${APP_TAGLINE.ro}`,
+  applicationName: APP_NAME,
+  icons: { icon: [{ url: "/icon.svg", type: "image/svg+xml" }] },
+  appleWebApp: { capable: true, title: APP_NAME, statusBarStyle: "black-translucent" },
 };
 
 export const viewport: Viewport = {
