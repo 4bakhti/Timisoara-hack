@@ -118,6 +118,8 @@ function FlowCore({ recipe, onExit, round, demo = false, talk }: ShootFlowProps 
   const busyRef = useRef(false);
   /** Bumped for every idea that is started, so answers for an earlier shot are dropped. */
   const runRef = useRef(0);
+  /** Whether this visit already counted a use of the recipe. */
+  const usedRef = useRef(false);
 
   const lang = useLang();
   const [live, setLive] = useState<HTMLVideoElement | null>(null);
@@ -386,10 +388,15 @@ function FlowCore({ recipe, onExit, round, demo = false, talk }: ShootFlowProps 
     }
   };
 
-  /** Recipe: keep a "before" frame on the phone and coach the recipe's idea. Nothing is sent. */
+  /** Recipe: keep a "before" frame on the phone and coach the recipe's idea. No photo is sent. */
   const startRecipe = async () => {
     if (!recipe || busyRef.current) return;
     busyRef.current = true;
+    // Counted once per visit, when the user actually starts recreating it; never on page load.
+    if (!usedRef.current) {
+      usedRef.current = true;
+      void api.recipes.use(recipe.id);
+    }
     unlockAudio();
     setProblem(null);
     try {
@@ -890,7 +897,13 @@ function FlowCore({ recipe, onExit, round, demo = false, talk }: ShootFlowProps 
               )}
 
               <div className="mt-8">
-                <FeedbackForm key={captures} lang={lang} round={round} />
+                <FeedbackForm
+                  key={captures}
+                  lang={lang}
+                  round={round}
+                  beforeTotal={beforeScored ? (beforeScore?.total ?? null) : null}
+                  afterTotal={shot.score.total}
+                />
               </div>
             </>
           )}

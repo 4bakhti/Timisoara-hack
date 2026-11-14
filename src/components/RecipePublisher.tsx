@@ -18,6 +18,7 @@ import { t, tf, type StringKey } from "@/i18n/strings";
 import { api, ApiFailure } from "@/lib/api";
 import type { Lang, Recipe, ShotIdea } from "@/lib/contracts";
 import { formatCoords, locate, type Located } from "@/state/position";
+import { storageMode } from "@/state/storage";
 import { getPoseTemplate } from "@/vision";
 
 const MAX_TITLE = 80;
@@ -71,7 +72,7 @@ export function RecipePublisher({ idea, sample, lang }: { idea: ShotIdea; sample
 
   const publish = async () => {
     const cleanTitle = title.trim();
-    if (sample || !cleanTitle || inFlight.current) return;
+    if (!cleanTitle || inFlight.current) return;
     inFlight.current = true;
     setPhase("publishing");
     setError(null);
@@ -86,11 +87,12 @@ export function RecipePublisher({ idea, sample, lang }: { idea: ShotIdea; sample
           ...(pose && pose.id === idea.subject?.poseTemplateId ? { targetPose: pose } : {}),
           ...(cleanPlace ? { place: cleanPlace } : {}),
           ...(position ? { lat: position.lat, lng: position.lng } : {}),
+          ...(sample ? { sample: true } : {}),
         }),
         api.health(),
       ]);
       setRecipe(created);
-      setTemporary(!health.db);
+      setTemporary(storageMode(health) === "memory");
       setPhase("done");
     } catch (err) {
       setError(publishError(err));
@@ -116,6 +118,7 @@ export function RecipePublisher({ idea, sample, lang }: { idea: ShotIdea; sample
     return (
       <section className={`${card} grid gap-3`} aria-live="polite">
         <h2 className="text-lg font-semibold">{recipe.title}</h2>
+        {recipe.sample && <p className={notice}>{t("madeFromSample", lang)}</p>}
         {isPublic ? (
           <>
             <p role="status" className="rounded-xl bg-green-400/15 p-3 text-sm leading-snug text-green-200">
@@ -136,20 +139,6 @@ export function RecipePublisher({ idea, sample, lang }: { idea: ShotIdea; sample
     );
   }
 
-  if (sample) {
-    return (
-      <section className={`${card} grid gap-3`}>
-        <h2 className="text-lg font-semibold">{t("makeRecipe", lang)}</h2>
-        <p role="status" className={notice}>
-          {t("samplePublishBlocked", lang)}
-        </p>
-        <button type="button" className={secondary} onClick={() => setPhase("closed")}>
-          {t("back", lang)}
-        </button>
-      </section>
-    );
-  }
-
   const busy = phase === "publishing";
 
   return (
@@ -161,6 +150,7 @@ export function RecipePublisher({ idea, sample, lang }: { idea: ShotIdea; sample
       }}
     >
       <h2 className="text-lg font-semibold">{t("recipePreview", lang)}</h2>
+      {sample && <p className={notice}>{t("samplePublishNote", lang)}</p>}
 
       <label className="grid gap-1 text-sm text-neutral-200">
         {t("recipeTitle", lang)}

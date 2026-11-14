@@ -13,6 +13,7 @@ import { t, tf } from "@/i18n/strings";
 import { api } from "@/lib/api";
 import { APP_VERSION } from "@/lib/brand";
 import type { Lang } from "@/lib/contracts";
+import { storageMode } from "@/state/storage";
 
 const MAX_COMMENT = 500;
 const RATINGS = [1, 2, 3, 4, 5] as const;
@@ -24,7 +25,18 @@ function newSessionId(): string {
   return `flow-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-export function FeedbackForm({ lang, round }: { lang: Lang; round?: string }) {
+export function FeedbackForm({
+  lang,
+  round,
+  beforeTotal,
+  afterTotal,
+}: {
+  lang: Lang;
+  round?: string;
+  /** The result screen's "before" total; left out when that picture was not scored. */
+  beforeTotal?: number | null;
+  afterTotal?: number | null;
+}) {
   const groupId = useId();
   const [rating, setRating] = useState<number | null>(null);
   const [comment, setComment] = useState("");
@@ -62,11 +74,13 @@ export function FeedbackForm({ lang, round }: { lang: Lang; round?: string }) {
           rating,
           ...(text ? { comment: text } : {}),
           ...(round ? { round } : {}),
+          ...(typeof beforeTotal === "number" ? { beforeTotal: Math.round(beforeTotal) } : {}),
+          ...(typeof afterTotal === "number" ? { afterTotal: Math.round(afterTotal) } : {}),
         }),
         api.health(),
       ]);
       saved = ok === true;
-      hasDatabase = health.db;
+      hasDatabase = storageMode(health) === "database";
     } catch {
       saved = false;
     }

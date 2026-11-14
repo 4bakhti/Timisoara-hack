@@ -365,6 +365,26 @@ export const STRINGS = {
   usedTimes: { en: "Uses: {n}", ro: "Utilizări: {n}" },
   recipeLoading: { en: "Loading the recipe…", ro: "Se încarcă rețeta…" },
   recipeMissing: { en: "This recipe could not be loaded.", ro: "Rețeta nu a putut fi încărcată." },
+  recipeNotFound: { en: "There is no recipe at this link.", ro: "Nu există nicio rețetă la acest link." },
+  recipeNotFoundWhy: {
+    en: "It may have been removed, or the link may be mistyped.",
+    ro: "Este posibil să fi fost eliminată sau ca linkul să fie scris greșit.",
+  },
+  recipeUnavailableWhy: {
+    en: "The recipe service did not answer. The recipe may still exist: try again in a moment.",
+    ro: "Serviciul de rețete nu a răspuns. Rețeta poate exista în continuare: încearcă din nou peste puțin timp.",
+  },
+  recipesNone: { en: "No recipes have been published yet.", ro: "Nu a fost publicată încă nicio rețetă." },
+  recipesUnavailable: { en: "The recipe list is not available.", ro: "Lista de rețete nu este disponibilă." },
+  recipesUnavailableWhy: {
+    en: "The recipe service did not answer. Nothing is shown rather than an incomplete list.",
+    ro: "Serviciul de rețete nu a răspuns. Nu afișăm nimic, în loc de o listă incompletă.",
+  },
+  madeFromSample: { en: "Made from sample suggestions", ro: "Făcută din sugestii demonstrative" },
+  samplePublishNote: {
+    en: "This idea is a sample, not a reading of your scene. It is published with the label “made from sample suggestions”.",
+    ro: "Această idee este un exemplu, nu o citire a scenei tale. Este publicată cu eticheta „făcută din sugestii demonstrative”.",
+  },
   recipeMissingWhy: {
     en: "It may not exist, it may have been removed, or the recipe service may be unavailable right now. The app cannot tell which.",
     ro: "Este posibil să nu existe, să fi fost eliminată sau ca serviciul de rețete să nu fie disponibil acum. Aplicația nu poate ști care dintre ele.",
