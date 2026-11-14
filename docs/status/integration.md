@@ -1,6 +1,6 @@
 # Integration: status
 
-Updated: Sat 14 Nov, 23:50. `main` at the commit that adds this file.
+Updated: Sun 15 Nov, 01:00. `main` at the commit that adds this file.
 
 ## Merged into `main`, in order
 
@@ -21,6 +21,7 @@ Updated: Sat 14 Nov, 23:50. `main` at the commit that adds this file.
 | 13 | Tiger Data connected: `sslmode=require` gets its libpq meaning (Tiger's certificates come from Timescale's own CA, so every connection had failed); credential downloads ignored by git; honest empty-recipes wording | `00a829b`, `fcbde5a` |
 | 14 | TimescaleDB continuous aggregate `coach_activity_hourly` (migration 0003, real-time, refreshed every 15 minutes) behind a new hour-by-hour chart on `/stats`; memory storage computes the same series | `5d07810` |
 | 15 | From the team's phone test: the target outline follows the person (anchored on the torso); framing scores 100 when the person fits the frame and only asks for clear changes; upper-body and sitting shots are coached with the torso estimated from the shoulders. Logged in `docs/LIVING_LAB.md` | `7e4384d` |
+| 16 | From the team's second test (sitting at a laptop): the planner plans from where the person is, so a seated or close person gets upper-body or sitting ideas with the frame cut at the bottom; a half-body pose with the hips out of sight is judged as an upper-body shot. Checked against the real model | `215bd7f` |
 
 **Do not merge `codex-2/storage-recipes` again.** Its last commit (`8969107`) was signed with a personal e-mail address. Its changes are already in `main`, re-committed unchanged as `5204a11` under the GitHub no-reply address. Merging the branch would add nothing but that address to the history.
 
