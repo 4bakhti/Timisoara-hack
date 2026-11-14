@@ -12,6 +12,16 @@ let player: HTMLAudioElement | null = null;
 let active: AbortController | null = null;
 let muted = false;
 
+/* When the server voice fails or answers too slowly, every line would wait for
+ * it before falling back. Use the device voice straight away for a while instead. */
+const SERVER_VOICE_PAUSE_MS = 2 * 60_000;
+let serverVoicePausedUntil = 0;
+
+/** Lets the next line try the server voice again at once. */
+export function resetServerVoice(): void {
+  serverVoicePausedUntil = 0;
+}
+
 function audioPlayer() {
   player ??= new Audio();
   player.preload = "auto";
@@ -64,7 +74,7 @@ export async function speakInstruction(
     if (line.id !== "custom" && await playClip(phraseClipUrl(line.id, lang), signal, options.localOnly ? 250 : 450)) {
       return;
     }
-    if (!options.localOnly && !signal.aborted && text.length <= 300) {
+    if (!options.localOnly && !signal.aborted && text.length <= 300 && Date.now() >= serverVoicePausedUntil) {
       const tts = new AbortController();
       const stopTts = () => tts.abort();
       signal.addEventListener("abort", stopTts, { once: true });
@@ -76,6 +86,8 @@ export async function speakInstruction(
         window.clearTimeout(timeout);
         signal.removeEventListener("abort", stopTts);
       }
+      // A failed or timed-out answer pauses the server voice; a line we cancelled for a newer one does not.
+      if (!blob && !signal.aborted) serverVoicePausedUntil = Date.now() + SERVER_VOICE_PAUSE_MS;
       if (blob && !signal.aborted) {
         const url = URL.createObjectURL(blob);
         try {

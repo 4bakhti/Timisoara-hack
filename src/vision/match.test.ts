@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Box } from "@/lib/contracts";
 import { angleDiff, bodyAngles3d, jointBend, mirrorFeatures, poseFeatures, templateToImage } from "./geometry";
-import { matchAll, matchFraming, matchPose } from "./match";
+import { JUDGE_FORWARD_LEAN, matchAll, matchFraming, matchPose } from "./match";
 import { buildPose, type PoseSpec } from "./poses/build";
 import { POSE_TEMPLATES, getPoseTemplate } from "./poses/catalog";
 import type { WorldPoints } from "./types";
@@ -160,14 +160,23 @@ describe("3D pose matching", () => {
     const frontal = matchTemplate("three-quarter", worldPose(0, 0));
     expect(legacy.score).toBe(100);
     expect(frontal.score).toBeLessThan(legacy.score);
-    expect(frontal.compared).toBe(legacy.compared + 1);
+    // 3D turn replaces the 2D ratio; forward lean adds one more feature only when it is judged.
+    expect(frontal.compared).toBe(legacy.compared + (JUDGE_FORWARD_LEAN ? 1 : 0));
     expect(frontal.corrections[0]?.id).toBe("turn_side");
     expect(matchTemplate("three-quarter", worldPose(45, 0)).score).toBe(100);
     expect(matchTemplate("three-quarter", worldPose(-45, 0)).score).toBe(100);
     expect(matchTemplate("relaxed-stand", worldPose(45, 0)).corrections[0]?.id).toBe("face_camera");
   });
 
-  it("compares forward lean with the sitting and upright targets", () => {
+  it.skipIf(JUDGE_FORWARD_LEAN)("leaves forward lean out until it is calibrated on phones", () => {
+    // Upright people read up to ~17° toward the camera; that must not cost points or start a correction.
+    const upright = matchTemplate("relaxed-stand", worldPose(0, 17));
+    expect(upright.score).toBe(100);
+    expect(upright.corrections).toEqual([]);
+    expect(matchTemplate("sit-lean-in", worldPose(0, 0)).corrections.map((c) => c.id)).not.toContain("lean_forward");
+  });
+
+  it.runIf(JUDGE_FORWARD_LEAN)("compares forward lean with the sitting and upright targets", () => {
     expect(matchTemplate("sit-lean-in", worldPose(0, 0)).corrections[0]?.id).toBe("lean_forward");
     expect(matchTemplate("sit-lean-in", worldPose(0, 20)).score).toBe(100);
     expect(matchTemplate("sit-lean-in", worldPose(0, 40)).corrections[0]?.id).toBe("straighten_up");

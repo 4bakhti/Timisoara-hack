@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "@/lib/api";
-import { speakInstruction, stopSpeaking } from "./voice";
+import { resetServerVoice, speakInstruction, stopSpeaking } from "./voice";
 
 const speak = vi.fn();
 const cancel = vi.fn();
@@ -28,6 +28,7 @@ beforeEach(() => {
   utterances.length = 0;
   speak.mockClear();
   cancel.mockClear();
+  resetServerVoice();
 });
 afterEach(() => {
   stopSpeaking();
@@ -57,6 +58,26 @@ describe("coach voice playback", () => {
     finish(null);
     await speech;
     expect(speak).not.toHaveBeenCalled();
+  });
+
+  it("uses the device voice at once for two minutes after the server voice fails", async () => {
+    const request = vi.spyOn(api, "speak").mockResolvedValue(null);
+    const finishLine = async (line: Promise<void>) => {
+      await vi.advanceTimersByTimeAsync(0);
+      utterances.at(-1)?.onend?.();
+      await line;
+    };
+
+    await finishLine(speakInstruction(en, "en"));
+    expect(request).toHaveBeenCalledOnce();
+
+    await finishLine(speakInstruction(ro, "ro"));
+    expect(request).toHaveBeenCalledOnce();
+    expect(utterances.at(-1)).toMatchObject({ text: ro.text, lang: "ro-RO" });
+
+    await vi.advanceTimersByTimeAsync(2 * 60_000);
+    await finishLine(speakInstruction(en, "en"));
+    expect(request).toHaveBeenCalledTimes(2);
   });
 
   it("uses local speech for the countdown and interrupts stale audio", async () => {

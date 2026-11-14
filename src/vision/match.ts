@@ -65,6 +65,15 @@ const RULES: Record<FeatureName, FeatureRule> = {
 
 const FEATURES = Object.keys(RULES) as FeatureName[];
 
+/**
+ * Forward lean from 3D points is measured (the lab readout shows it) but not
+ * judged yet. People standing upright and facing the camera read 8–17° toward
+ * the camera, and the reading moves with the phone's tilt, so with a 7°
+ * tolerance the coach would tell people who stand straight to straighten up.
+ * Turn this on once the reading is calibrated on phones.
+ */
+export const JUDGE_FORWARD_LEAN = false;
+
 function featureError(name: FeatureName, live: number, target: number): number {
   return name === "turn" ? live - target : angleDiff(live, target);
 }
@@ -274,7 +283,7 @@ export function matchAll(
       liveFeatures.turnDeg = Math.abs(yawDeg);
       templateFeatures.turnDeg = depthTarget.turnDeg;
     }
-    if (leanDeg !== null) {
+    if (JUDGE_FORWARD_LEAN && leanDeg !== null) {
       liveFeatures.forwardLean = leanDeg;
       templateFeatures.forwardLean = depthTarget.forwardLean;
     }
