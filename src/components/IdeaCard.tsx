@@ -3,8 +3,10 @@ import { t } from "@/i18n/strings";
 import { BONES, getPoseTemplate, headRadiusFor } from "@/vision";
 
 /** A small drawing of the frame: where the subject goes, and the pose if there is one. */
-function FramingDiagram({ idea }: { idea: ShotIdea }) {
+export function FramingDiagram({ idea, className }: { idea: ShotIdea; className?: string }) {
   const portrait = idea.photographer.orientation === "portrait";
+  // A wide frame is sized by its width, so it never squeezes the text beside it.
+  const size = className ?? (portrait ? "h-28 w-auto" : "h-auto w-28");
   const w = portrait ? 75 : 100;
   const h = portrait ? 100 : 75;
   const box = idea.framing.subjectBox;
@@ -14,7 +16,7 @@ function FramingDiagram({ idea }: { idea: ShotIdea }) {
   const py = (y: number) => box.y * h + y * figureHeight;
 
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} className="h-28 w-auto shrink-0 rounded-md bg-neutral-800" aria-hidden="true">
+    <svg viewBox={`0 0 ${w} ${h}`} className={`${size} shrink-0 self-start rounded-md bg-neutral-800`} aria-hidden="true">
       <g stroke="rgba(255,255,255,0.14)" strokeWidth="0.6">
         <line x1={w / 3} y1="0" x2={w / 3} y2={h} />
         <line x1={(2 * w) / 3} y1="0" x2={(2 * w) / 3} y2={h} />
@@ -72,7 +74,7 @@ export function IdeaCard({ idea, lang, onUse }: { idea: ShotIdea; lang: Lang; on
           </div>
         )}
       </dl>
-      <button className="mt-auto rounded-full bg-green-400 px-4 py-3 text-base font-semibold text-black active:scale-[0.98]" onClick={onUse}>
+      <button type="button" className="mt-auto min-h-12 rounded-full bg-green-400 px-4 py-3 text-base font-semibold text-black active:scale-[0.98]" onClick={onUse}>
         {t("useShot", lang)}
       </button>
     </article>
