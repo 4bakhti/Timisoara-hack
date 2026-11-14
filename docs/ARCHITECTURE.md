@@ -67,12 +67,28 @@ session.captureNow(); // shutter button
 session.restart();    // coach the same idea again
 ```
 
-- Call `unlockAudio()` inside a tap handler before the first session; phones block sound otherwise.
+- Inside the first tap handler call `unlockAudio()` (from `@/coach`) and `requestMotionPermission()` (from `@/vision`); phones block sound and the tilt sensor otherwise.
 - The video is expected to use `object-fit: cover`. If it is mirrored with CSS, mirror the canvas the same way. No text is drawn on the canvas.
 - In friend mode, show instructions with `to: "photographer"` on screen; lines for the subject are spoken.
-- `session.simulated` is true while the scripted tracker is running instead of the real one.
+- Stop a session by passing `paused: true` (for example once a shot has been captured) or by unmounting.
 
-Other helpers: `grabFrame(video, { maxSide })` for stills, `POSE_TEMPLATES` / `getPoseTemplate(id)` for the pose library, `drawGuides` for custom overlays. All from `@/vision`.
+Which engine runs:
+
+| Situation | Engine | Notes |
+|---|---|---|
+| Idea with `subject` (a person) | Body tracking on the device | Real measurements, real corrections, automatic capture |
+| Idea without `subject` (object, food, place) | Server-guided framing | Asks `/api/guide` every 2.5 s. With sample data it shows the idea's own instruction and waits for the shutter |
+| `engine: "sim"` | Scripted session | For demos and tests without a person. `session.simulated` is true |
+
+No camera (desktop, tests)? Pass `still` (a picture address or data URL) instead of `video`. The same engines run on the picture.
+
+If tracking cannot start on a device, `phase` is `"error"` with `error: "tracker_unavailable"`. The guides are still drawn and `captureNow()` still works, so show "line up with the outline and press the shutter".
+
+Scores: `onCapture` gives `shot.score` (a `ShotScore`). For the "before" picture call `await scoreStill(beforeDataUrl, idea, mode)` from `@/vision`: it uses the same function, so the two numbers compare fairly. Parts that could not be measured are `null`; show them as "not measured", not as zero.
+
+Other helpers from `@/vision`: `grabFrame(video, { maxSide })` for stills, `POSE_TEMPLATES` / `getPoseTemplate(id)` for the pose library, `drawGuides` for custom overlays.
+
+Test pages: `/lab` (pose library), `/lab/live` (the coach on the live camera with a pose picked by hand), `/lab/try` (the coach on a single picture).
 
 ## API routes
 
