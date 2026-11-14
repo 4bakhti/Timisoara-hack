@@ -148,7 +148,7 @@ const ENTRIES: Entry[] = [
     },
     describe: "Body turned about 45 degrees away from the camera, face toward the camera.",
     tags: ["standing", "confident", "half-body", "full-body"],
-    spec: { turn: 0.55, lUpperArm: 10, lForearm: -4, rUpperArm: 8, rForearm: 6, ...standing },
+    spec: { turn: 0.55, turnDeg: 45, lUpperArm: 10, lForearm: -4, rUpperArm: 8, rForearm: 6, ...standing },
   },
   {
     id: "sit-relaxed",
@@ -182,6 +182,7 @@ const ENTRIES: Entry[] = [
     describe: "Sitting and leaning forward with elbows on the knees, hands together. Engaged look.",
     tags: ["sitting", "confident", "full-body"],
     spec: {
+      forwardLean: 20,
       lUpperArm: 24,
       lForearm: -52,
       rUpperArm: 24,

@@ -7,7 +7,7 @@ const LIMB_BY_PREFIX: [RegExp, Limb][] = [
   [/_right_(arm|elbow)$|^hand_(in|out)_right$/, "rightArm"],
   [/_left_(knee|leg)$/, "leftLeg"],
   [/_right_(knee|leg)$/, "rightLeg"],
-  [/^(lean_left|lean_right|stand_straight|turn_side|face_camera|relax_shoulders)$/, "torso"],
+  [/^(lean_left|lean_right|lean_forward|straighten_up|stand_straight|turn_side|face_camera|relax_shoulders)$/, "torso"],
   [/^(tilt_head_left|tilt_head_right|look_at_camera|chin_up|chin_down|eyes_open|smile)$/, "head"],
 ];
 

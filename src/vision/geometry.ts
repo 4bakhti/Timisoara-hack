@@ -20,6 +20,10 @@ export interface PoseFeatures {
   headTilt?: number;
   /** Shoulder width divided by torso length. Smaller = turned away from the camera. */
   turn?: number;
+  /** Amount of 3D turn from facing the camera, in degrees, allowing either side. */
+  turnDeg?: number;
+  /** Forward lean toward the camera in degrees. */
+  forwardLean?: number;
   /** Limb directions measured from "down along the torso". Positive = away from the body. */
   lUpperArm?: number;
   rUpperArm?: number;
@@ -136,6 +140,8 @@ export function mirrorFeatures(f: PoseFeatures): PoseFeatures {
     lean: flip(f.lean),
     headTilt: flip(f.headTilt),
     turn: f.turn,
+    turnDeg: f.turnDeg,
+    forwardLean: f.forwardLean,
     lUpperArm: f.rUpperArm,
     rUpperArm: f.lUpperArm,
     lForearm: f.rForearm,
@@ -194,12 +200,30 @@ export function templatePlacement(points: PosePoints): BodyPlacement {
 }
 
 /**
- * Body turn and forward lean from 3D points: what a flat picture cannot show.
- * TO BUILD (Person C): yaw from the shoulder line's depth (0 = facing the camera,
- * positive = turned toward the person's left), lean from the hips→shoulders
- * direction (0 = upright, positive = leaning toward the camera).
+ * MediaPipe pose world landmarks have x to image right, y down and z away
+ * from the camera. Yaw is positive toward the subject's left; lean is
+ * positive toward the camera. Both angles are zero facing forward, upright.
  */
 export function bodyAngles3d(world: WorldPoints | undefined): { yawDeg: number | null; leanDeg: number | null } {
-  void world;
-  return { yawDeg: null, leanDeg: null };
+  const { lShoulder, rShoulder, lHip, rHip } = world ?? {};
+  let yawDeg: number | null = null;
+  let leanDeg: number | null = null;
+
+  if (lShoulder && rShoulder) {
+    const shoulderX = lShoulder[0] - rShoulder[0];
+    const shoulderZ = lShoulder[2] - rShoulder[2];
+    const shoulderSpan = Math.hypot(shoulderX, shoulderZ);
+    if (Number.isFinite(shoulderSpan) && shoulderSpan > 1e-6) {
+      yawDeg = deg(Math.atan2(shoulderZ, shoulderX));
+    }
+    if (lHip && rHip) {
+      const up = (lHip[1] + rHip[1] - lShoulder[1] - rShoulder[1]) / 2;
+      const towardCamera = (lHip[2] + rHip[2] - lShoulder[2] - rShoulder[2]) / 2;
+      const torsoSpan = Math.hypot(up, towardCamera);
+      if (Number.isFinite(torsoSpan) && torsoSpan > 1e-6) {
+        leanDeg = deg(Math.atan2(towardCamera, up));
+      }
+    }
+  }
+  return { yawDeg, leanDeg };
 }

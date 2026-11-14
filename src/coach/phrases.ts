@@ -63,6 +63,8 @@ export const PHRASES = {
 
   // --- torso and head
   lean_left: p("subject", "Lean a little to your left.", "Înclină-te puțin spre stânga ta."),
+  lean_forward: p("subject", "Lean a little toward the camera.", "Apleacă-te puțin spre cameră."),
+  straighten_up: p("subject", "Straighten up a little.", "Îndreaptă-te puțin."),
   lean_right: p("subject", "Lean a little to your right.", "Înclină-te puțin spre dreapta ta."),
   stand_straight: p("subject", "Stand up straight.", "Stai drept."),
   turn_side: p("subject", "Turn your body slightly to the side.", "Întoarce-te puțin într-o parte."),
@@ -70,6 +72,13 @@ export const PHRASES = {
   tilt_head_left: p("subject", "Tilt your head slightly to your left.", "Înclină puțin capul spre stânga ta."),
   tilt_head_right: p("subject", "Tilt your head slightly to your right.", "Înclină puțin capul spre dreapta ta."),
   relax_shoulders: p("subject", "Relax your shoulders.", "Relaxează umerii."),
+
+  // --- face
+  eyes_open: p("subject", "Open your eyes when you're ready.", "Deschide ochii când ești gata."),
+  look_at_camera: p("subject", "Look at the camera.", "Privește spre cameră."),
+  chin_down: p("subject", "Lower your chin a little.", "Coboară puțin bărbia."),
+  chin_up: p("subject", "Lift your chin a little.", "Ridică puțin bărbia."),
+  smile: p("subject", "A little smile, if you like.", "Un zâmbet mic, dacă vrei."),
 
   // --- encouragement and capture
   almost: p("anyone", "Almost there.", "Aproape gata."),

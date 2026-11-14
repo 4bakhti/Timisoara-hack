@@ -16,6 +16,10 @@ export interface PoseSpec {
   lean?: number;
   /** 0 = facing the camera, 1 = side-on. Narrows shoulders and hips. */
   turn?: number;
+  /** Body turn away from the camera in degrees, to either side. Default 0. */
+  turnDeg?: number;
+  /** Lean toward the camera in degrees. Default 0. */
+  forwardLean?: number;
   /** Sideways hip shift in torso lengths. Positive is toward the subject's left. */
   hipShift?: number;
   /** Head tilt in degrees. Positive tilts toward the subject's left. */
@@ -57,6 +61,13 @@ function dir(angleDeg: number, side: 1 | -1): Point2 {
 }
 
 const add = (p: Point2, d: Point2, len = 1): Point2 => [p[0] + d[0] * len, p[1] + d[1] * len];
+
+// The coach receives the original points, while the drawing/JSON contract stays 2D.
+const depthTargets = new WeakMap<PosePoints, { turnDeg: number; forwardLean: number }>();
+
+export function poseDepthTarget(points: PosePoints) {
+  return depthTargets.get(points);
+}
 
 export function buildPose(spec: PoseSpec): PosePoints {
   const turn = Math.min(Math.max(spec.turn ?? 0, 0), 1);
@@ -105,7 +116,9 @@ export function buildPose(spec: PoseSpec): PosePoints {
     lAnkle,
     rAnkle,
   };
-  return fitToUnitBox(raw);
+  const points = fitToUnitBox(raw);
+  depthTargets.set(points, { turnDeg: spec.turnDeg ?? 0, forwardLean: spec.forwardLean ?? 0 });
+  return points;
 }
 
 /** Scales the figure to fill the unit box's height and centres it horizontally. */

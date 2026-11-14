@@ -28,7 +28,7 @@ export interface Measurement {
   framing: FramingMatch | null;
   /** Phone roll away from level, in degrees. null when the device gives no reading. */
   levelError: number | null;
-  /** Face signals near a match (null when unknown). TO USE (Person C): e.g. never shoot with closed eyes. */
+  /** Face signals near a match (null when unknown). */
   face?: FaceSignals | null;
 }
 
@@ -50,7 +50,7 @@ export interface BrainOptions {
   mode: CoachMode;
   /** false for ideas without a pose: only framing and level are judged. */
   expectPose: boolean;
-  /** The idea's style. TO USE (Person C): e.g. ask for eye contact in portraits, not in candid shots. */
+  /** The idea's style, used for optional face cues. */
   style?: ShotStyle;
 }
 
@@ -82,6 +82,9 @@ const WEIGHTS = { pose: 0.5, framing: 0.38, level: 0.12 } as const;
 const LEVEL_TOLERANCE_DEG = 4;
 const MINOR_POSE_WEIGHT = 0.12;
 const BLOCKING_POSE_WEIGHT = 0.35;
+const FACE_CUE_SCORE = 75;
+const EYES_OPEN_MIN = 0.35;
+const SMILE_MIN = 0.35;
 const COUNT_LINES: PhraseId[] = ["three", "two", "one"];
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
@@ -107,11 +110,14 @@ export class CoachBrain {
   private lastSpoken: PhraseId | null = null;
   private lastSpokeAt = -Infinity;
   private saidAlmost = false;
+  private saidSmile = false;
 
   private readySince: number | null = null;
   private holdSince = 0;
   private countSince = 0;
   private countStep = -1;
+  private lastCaptureUpdate = 0;
+  private eyesClosedSince: number | null = null;
   private done = false;
 
   constructor(private readonly opts: BrainOptions) {}
@@ -150,7 +156,7 @@ export class CoachBrain {
         ...base,
         phase: this.phase === "loading" ? "searching" : this.phase,
         score: Math.round(this.score),
-        instruction: this.current,
+        instruction: this.eyesClosedSince === null ? this.current : "eyes_open",
         countdown: this.countdownValue(),
         speak,
       };
@@ -166,8 +172,12 @@ export class CoachBrain {
 
     // --- what could be corrected, most important first
     const candidates = this.candidates(m);
+    const faceCue = this.faceCue(m);
+    // Give an optional face cue time to be heard when it is the first correction.
+    const awaitingFaceCue = faceCue !== null && faceCue !== this.lastSpoken && candidates.length === 0;
+    if (faceCue) candidates.push({ id: faceCue, weight: 0 });
     const blocking = candidates.some((c) => c.weight >= BLOCKING_POSE_WEIGHT);
-    const ready = this.score >= READY_SCORE && !blocking;
+    const ready = this.score >= READY_SCORE && !blocking && !awaitingFaceCue;
 
     // --- capture sequence
     if (this.phase === "holding" || this.phase === "countdown") {
@@ -175,7 +185,11 @@ export class CoachBrain {
       if (this.score < DROP_SCORE || framingBroke) {
         this.resetCapture();
         this.phase = "coaching";
-      } else if (this.phase === "holding") {
+      } else {
+        const pause = this.pauseForEyes(m);
+        if (pause) return { ...base, score, ...pause };
+      }
+      if (this.phase === "holding") {
         if (m.now - this.holdSince >= TIMING.holdFor) {
           this.phase = "countdown";
           this.countSince = m.now;
@@ -206,9 +220,12 @@ export class CoachBrain {
       if (m.now - this.readySince >= TIMING.settleFor) {
         this.phase = "holding";
         this.holdSince = m.now;
+        this.lastCaptureUpdate = m.now;
         this.current = "hold";
         this.currentSince = m.now;
         this.pending = null;
+        const pause = this.pauseForEyes(m);
+        if (pause) return { ...base, score, ...pause };
         return { ...base, phase: "holding", score, instruction: "hold", speak: this.say("hold", m.now) };
       }
     } else {
@@ -217,6 +234,7 @@ export class CoachBrain {
 
     this.chooseInstruction(candidates, m.now);
     speak ??= this.maybeSpeak(m.now);
+    if (speak === "smile") this.saidSmile = true;
     if (!speak && !this.saidAlmost && this.score >= 74 && m.now - this.lastSpokeAt >= 4500) {
       this.saidAlmost = true;
       speak = this.say("almost", m.now);
@@ -224,6 +242,48 @@ export class CoachBrain {
     if (this.score < 60) this.saidAlmost = false;
 
     return { ...base, phase: "coaching", score, instruction: this.current, speak };
+  }
+
+  private faceCue(m: Measurement): PhraseId | null {
+    const { face, pose } = m;
+    if (!this.opts.expectPose || !face || !pose || pose.score < FACE_CUE_SCORE) return null;
+
+    const { style } = this.opts;
+    if (style === "portrait" || style === "dramatic") {
+      if (Math.abs(face.yawDeg ?? 0) > 20) return "look_at_camera";
+      if (face.pitchDeg !== null && face.pitchDeg > 15) return "chin_down";
+      if (face.pitchDeg !== null && face.pitchDeg < -15) return "chin_up";
+    }
+    if ((style === "playful" || style === "candid") && !this.saidSmile && face.smile !== null && face.smile < SMILE_MIN) {
+      return "smile";
+    }
+    return null;
+  }
+
+  private pauseForEyes(m: Measurement): Pick<Decision, "phase" | "instruction" | "countdown" | "speak"> | null {
+    const eyesOpen = m.face?.eyesOpen;
+    if (eyesOpen != null && eyesOpen >= EYES_OPEN_MIN && this.eyesClosedSince !== null) {
+      const pausedFor = m.now - this.eyesClosedSince;
+      this.holdSince += pausedFor;
+      this.countSince += pausedFor;
+      this.eyesClosedSince = null;
+    }
+
+    const closed = eyesOpen != null && eyesOpen < EYES_OPEN_MIN;
+    if (!closed && this.eyesClosedSince === null) {
+      this.lastCaptureUpdate = m.now;
+      return null;
+    }
+
+    const firstClosedFrame = this.eyesClosedSince === null;
+    // Freeze at the last processed step, even if a frame arrived after the countdown deadline.
+    this.eyesClosedSince ??= this.lastCaptureUpdate;
+    return {
+      phase: this.phase,
+      instruction: "eyes_open",
+      countdown: this.countdownValue(),
+      speak: firstClosedFrame ? this.say("eyes_open", m.now) : null,
+    };
   }
 
   private candidates(m: Measurement): Correction[] {
@@ -290,6 +350,7 @@ export class CoachBrain {
   private resetCapture(): void {
     this.readySince = null;
     this.countStep = -1;
+    this.eyesClosedSince = null;
   }
 }
 
