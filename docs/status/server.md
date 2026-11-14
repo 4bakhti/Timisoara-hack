@@ -6,7 +6,7 @@ Updated 14 November 2026 · `codex-2/backend-extras`
 
 The branch contains the Stage 1 correction player and TTS route, plus the Stage 2 ElevenAgents runtime and its four client tools. Both stages are implemented for interface integration. The complete live conversation has not been demonstrated. The main shooting screen still needs the interface adapter, and the provider needs a configured agent and credentials.
 
-GitHub reported HTTP 403 and read-only access for the current identity. No PR is open. The branch can be published by the integrator from the accompanying Git bundle. The first commit publishes the bridge types and the second supplies the runtime. Integrate these before merging the interface branch.
+GitHub reported HTTP 403 and read-only access for the current identity. No PR is open. The branch can be published by the integrator from the accompanying Git bundle. The first commit publishes the bridge types. The later commits supply the runtime and keep local speech active across connection loss. Integrate these before merging the interface branch.
 
 ## Interface imports and wiring
 
@@ -27,7 +27,7 @@ The coach's own words reach the speaker through prepared clips, ElevenLabs TTS, 
 
 ## Verification
 
-- `npm run check` passed on Node 22.22.2, including typecheck, lint, 74 tests and production build.
+- `npm run check` passed on Node 22.22.2, including typecheck, lint, 76 tests and production build.
 - `npm run voice:check` validated the checked-in client tool schemas. The clip generator reported missing credentials. A production localhost smoke returned 200 for `/shoot` and `/api/health`, with 501 `not_configured` for both voice POST endpoints.
 - Mock tests exercised Romanian TTS parameters, fixed phrase caching, session issuance limits, invalid and repeated requests, unavailable camera, stale actions, cancellation during countdown, capture result delivery, fallback and reconnect. Headless Chromium exercised the official browser SDK with mocked WebSocket events and emulated camera/mic input. Romanian initialization, camera/mic coexistence, tool replay and microphone cleanup passed.
 - Still to verify with credentials and after interface integration: Gemini scene-specific results, English and Romanian ElevenLabs audio and pronunciation, generated clips, Agents entitlement, two-way spoken actions, agent interruptions and provider retention configuration. Still to verify on physical phones: audio unlock, speaker echo, venue noise, camera/mic coexistence and reconnect. No live provider or deployment was used for these checks.

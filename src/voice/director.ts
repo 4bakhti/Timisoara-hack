@@ -144,11 +144,16 @@ export function createVoiceDirector(
     current.tools.end();
     clearTimeout(userTurnTimer);
     userTurnUntil = 0;
-    clearPending();
 
     const participant = current.participant;
-    audio.reset();
-    audio.setCounting(isCounting(context));
+    audio.detach();
+    // A provider failure never interrupts a locally scheduled countdown or correction.
+    if (reason) drain();
+    else {
+      clearPending();
+      audio.cancel();
+      audio.setCounting(false);
+    }
     if (participant) {
       participant.setVolume({ volume: 0 });
       participant.setMicMuted(true);
@@ -282,6 +287,8 @@ export function createVoiceDirector(
           patch({ status: "disconnected", reason: null, transcript: null });
         }
         context = null;
+        audio.setCounting(false);
+        audio.setEnabled(outputEnabled);
         await closing;
       };
       if (!options?.afterCapture || !current?.participant?.isOpen()) return finish();

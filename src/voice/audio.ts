@@ -101,10 +101,8 @@ export class VoiceAudio {
     });
   }
 
-  reset() {
-    this.cancelLocal();
+  detach() {
     this.session = null;
-    this.counting = false;
     this.talking = false;
     this.suppressing = false;
     this.volume = null;

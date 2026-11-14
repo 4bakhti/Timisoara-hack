@@ -227,6 +227,34 @@ describe("voice director with a mocked conversation and audio output", () => {
     await f.director.end();
   });
 
+  it("keeps the countdown playing locally if the provider disconnects", async () => {
+    const f = fixture();
+    f.update({ coachPhase: "countdown" });
+    await f.director.start("en");
+    f.director.deliverCorrection(f.count);
+    f.provider().disconnected();
+    expect(f.playback[0].signal.aborted).toBe(false);
+    expect(f.director.getState().reason).toBe("connection_lost");
+    f.director.deliverCorrection({ ...f.count, instruction: { id: "two", text: "Two.", to: "anyone" } });
+    expect(f.playback[1].line.instruction.id).toBe("two");
+    await f.director.end();
+    expect(f.playback[1].signal.aborted).toBe(true);
+  });
+
+  it("can coach a second shoot without starting another provider session", async () => {
+    const f = fixture();
+    f.update();
+    await f.director.start("en");
+    const ended = f.director.end({ afterCapture: true });
+    await vi.advanceTimersByTimeAsync(0);
+    await ended;
+    f.update();
+    f.director.deliverCorrection(f.correction);
+    expect(f.playback[0].line).toEqual(f.correction);
+    expect(f.connect).toHaveBeenCalledOnce();
+    await f.director.end();
+  });
+
   it("reports unavailable provider setup and still plays the local correction", async () => {
     const f = fixture();
     f.connect.mockRejectedValueOnce(new VoiceProviderFailure("not_configured"));
