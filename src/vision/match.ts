@@ -7,9 +7,11 @@
  */
 import type { Box, CoachMode, PosePoints } from "@/lib/contracts";
 import type { PhraseId } from "@/coach/phrases";
+import { poseDepthTarget } from "./poses/build";
 import type { WorldPoints } from "./types";
 import {
   angleDiff,
+  bodyAngles3d,
   bodyPlacement,
   jointBend,
   mirrorFeatures,
@@ -57,6 +59,8 @@ const RULES: Record<FeatureName, FeatureRule> = {
   lean: { tol: 6, span: 22, weight: 0.7 },
   headTilt: { tol: 11, span: 30, weight: 0.3 },
   turn: { tol: 0.14, span: 0.4, weight: 0.5 },
+  turnDeg: { tol: 12, span: 40, weight: 0.7 },
+  forwardLean: { tol: 7, span: 24, weight: 0.7 },
 };
 
 const FEATURES = Object.keys(RULES) as FeatureName[];
@@ -160,6 +164,16 @@ function poseCorrections(live: PoseFeatures, target: PoseFeatures): Correction[]
     push(error > 0 ? "turn_side" : "face_camera", "turn", error);
   }
 
+  if (live.turnDeg !== undefined && target.turnDeg !== undefined) {
+    const error = live.turnDeg - target.turnDeg;
+    push(error < 0 ? "turn_side" : "face_camera", "turnDeg", error);
+  }
+
+  if (live.forwardLean !== undefined && target.forwardLean !== undefined) {
+    const error = angleDiff(live.forwardLean, target.forwardLean);
+    push(error < 0 ? "lean_forward" : "straighten_up", "forwardLean", error);
+  }
+
   if (live.headTilt !== undefined && target.headTilt !== undefined) {
     const error = angleDiff(live.headTilt, target.headTilt);
     push(error < 0 ? "tilt_head_left" : "tilt_head_right", "headTilt", error);
@@ -247,12 +261,24 @@ export function matchAll(
   box: Box,
   aspect: number,
   mode: CoachMode,
-  /** Live 3D points. TO USE (Person C): body turn and forward lean that 2D cannot see. */
+  /** Live 3D points for matching catalog templates with depth targets. */
   world?: WorldPoints,
 ): { pose: PoseMatch | null; framing: FramingMatch | null } {
-  void world;
   const liveFeatures = poseFeatures(toIsotropic(live, aspect));
   const templateFeatures = poseFeatures(template);
+  const depthTarget = world && poseDepthTarget(template);
+  if (depthTarget && liveFeatures && templateFeatures) {
+    const { yawDeg, leanDeg } = bodyAngles3d(world);
+    if (yawDeg !== null) {
+      delete liveFeatures.turn;
+      liveFeatures.turnDeg = Math.abs(yawDeg);
+      templateFeatures.turnDeg = depthTarget.turnDeg;
+    }
+    if (leanDeg !== null) {
+      liveFeatures.forwardLean = leanDeg;
+      templateFeatures.forwardLean = depthTarget.forwardLean;
+    }
+  }
   return {
     pose: liveFeatures && templateFeatures ? matchPose(liveFeatures, templateFeatures) : null,
     framing: matchFraming(live, template, box, aspect, mode),

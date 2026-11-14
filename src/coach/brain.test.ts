@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { FaceSignals } from "@/vision/types";
 import type { FramingMatch, PoseMatch } from "@/vision/match";
 import { CoachBrain, TIMING, levelScore, type Decision, type Measurement } from "./brain";
 import type { PhraseId } from "./phrases";
@@ -39,6 +40,9 @@ function run(
 }
 
 const visible = { personVisible: true, levelError: null } as const;
+const matched = { ...visible, pose: goodPose, framing: goodFraming };
+const openFace: FaceSignals = { eyesOpen: 0.9, smile: 0.6, yawDeg: 0, pitchDeg: 0 };
+const closedFace = { ...openFace, eyesOpen: 0.2 };
 
 describe("levelScore", () => {
   it("is null without a reading and falls as the phone tilts", () => {
@@ -124,6 +128,86 @@ describe("CoachBrain", () => {
     const tail = spoken.slice(-5);
     expect(tail).toEqual(["hold", "three", "two", "one", "got_it"]);
     expect(decisions.filter((d) => d.phase === "countdown").map((d) => d.countdown)).toContain(3);
+  });
+
+  it("waits to finish the hold until the eyes open", () => {
+    const brain = new CoachBrain({ mode: "solo", expectPose: true });
+    const paused = run(brain, 0, 5000, { ...matched, face: closedFace });
+    expect(paused.last).toMatchObject({ phase: "holding", instruction: "eyes_open", countdown: null, capture: false });
+    expect(paused.spoken.filter((id) => id === "eyes_open")).toHaveLength(1);
+    const resumed = run(brain, 5100, 9000, { ...matched, face: openFace });
+    expect(resumed.decisions[0]).toMatchObject({ phase: "holding", instruction: "hold", capture: false });
+    expect(resumed.spoken).toEqual(["three", "two", "one", "got_it"]);
+    expect(resumed.decisions.filter((decision) => decision.capture)).toHaveLength(1);
+  });
+
+  it("freezes the last countdown step when the next frame has closed eyes", () => {
+    const brain = new CoachBrain({ mode: "solo", expectPose: true });
+    const counting = run(brain, 0, 3100, { ...matched, face: openFace });
+    expect(counting.last).toMatchObject({ phase: "countdown", countdown: 1 });
+    const paused = run(brain, 4000, 5000, { ...matched, face: closedFace });
+    expect(paused.last).toMatchObject({ phase: "countdown", instruction: "eyes_open", countdown: 1, capture: false });
+    expect(paused.spoken).toEqual(["eyes_open"]);
+    const missing = brain.update({ ...matched, now: 5100, face: null });
+    expect(missing).toMatchObject({ countdown: 1, capture: false });
+    const resumed = run(brain, 5200, 6300, { ...matched, face: openFace });
+    expect(resumed.decisions[0]).toMatchObject({ countdown: 1, capture: false });
+    expect(resumed.decisions.filter((decision) => decision.capture)).toHaveLength(1);
+  });
+
+  it("keeps the regular capture sequence when face tracking is unavailable", () => {
+    const brain = new CoachBrain({ mode: "solo", expectPose: true, style: "portrait" });
+    const result = run(brain, 0, 4500, { ...matched, face: null });
+    expect(result.spoken).toEqual(["intro_solo", "hold", "three", "two", "one", "got_it"]);
+  });
+
+  it.each(["portrait", "dramatic"] as const)("asks for eye contact in %s once the pose reaches 75", (style) => {
+    const brain = new CoachBrain({ mode: "solo", expectPose: true, style });
+    const face = { ...openFace, yawDeg: -25 };
+    const earlier = run(brain, 0, 3000, { ...matched, pose: { ...goodPose, score: 74 }, face });
+    expect(earlier.spoken).not.toContain("look_at_camera");
+    const later = run(brain, 3100, 6500, { ...matched, pose: { ...goodPose, score: 75 }, face });
+    expect(later.spoken).toContain("look_at_camera");
+  });
+
+  it("continues toward capture once the optional eye-contact cue is spoken", () => {
+    const brain = new CoachBrain({ mode: "solo", expectPose: true, style: "portrait" });
+    const result = run(brain, 0, 8000, { ...matched, face: { ...openFace, yawDeg: 30 } });
+    expect(result.spoken).toContain("look_at_camera");
+    expect(result.decisions.filter((decision) => decision.capture)).toHaveLength(1);
+  });
+
+  it.each([[18, "chin_down"], [-18, "chin_up"]] as const)("corrects portrait head pitch of %i degrees", (pitchDeg, cue) => {
+    const brain = new CoachBrain({ mode: "solo", expectPose: true, style: "portrait" });
+    const result = run(brain, 0, 3000, { ...matched, face: { ...openFace, pitchDeg } });
+    expect(result.spoken).toContain(cue);
+  });
+
+  it("prioritizes framing and pose corrections over eye contact", () => {
+    const brain = new CoachBrain({ mode: "solo", expectPose: true, style: "portrait" });
+    const face = { ...openFace, yawDeg: 30 };
+    const framing = run(brain, 0, 3000, { ...matched, framing: framingNeeds("step_back"), face });
+    expect(framing.last.instruction).toBe("step_back");
+    const pose = run(brain, 3100, 6000, { ...matched, pose: poseNeeds("raise_left_arm", 0.4, 80), face });
+    expect(pose.last.instruction).toBe("raise_left_arm");
+    expect([...framing.spoken, ...pose.spoken]).not.toContain("look_at_camera");
+  });
+
+  it.each(["playful", "candid"] as const)("offers one optional smile in %s and continues to capture", (style) => {
+    const brain = new CoachBrain({ mode: "solo", expectPose: true, style });
+    const face = { ...openFace, smile: 0.1, yawDeg: 25, pitchDeg: 18 };
+    const result = run(brain, 0, 15000, { ...matched, face });
+    expect(result.spoken.filter((id) => id === "smile")).toHaveLength(1);
+    expect(result.spoken).not.toContain("look_at_camera");
+    expect(result.spoken).not.toContain("chin_down");
+    expect(result.decisions.filter((decision) => decision.capture)).toHaveLength(1);
+  });
+
+  it("skips smile and eye-contact cues in other styles", () => {
+    const brain = new CoachBrain({ mode: "solo", expectPose: true });
+    const face = { ...openFace, smile: 0, yawDeg: 25, pitchDeg: 18 };
+    const result = run(brain, 0, 4500, { ...matched, face });
+    expect(result.spoken).toEqual(["intro_solo", "hold", "three", "two", "one", "got_it"]);
   });
 
   it("cancels the countdown when the match drops", () => {

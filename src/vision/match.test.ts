@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { Box } from "@/lib/contracts";
-import { angleDiff, jointBend, mirrorFeatures, poseFeatures, templateToImage } from "./geometry";
+import { angleDiff, bodyAngles3d, jointBend, mirrorFeatures, poseFeatures, templateToImage } from "./geometry";
 import { matchAll, matchFraming, matchPose } from "./match";
 import { buildPose, type PoseSpec } from "./poses/build";
 import { POSE_TEMPLATES, getPoseTemplate } from "./poses/catalog";
+import type { WorldPoints } from "./types";
 
 const BOX: Box = { x: 0.3, y: 0.1, w: 0.4, h: 0.8 };
 const PORTRAIT = 3 / 4;
@@ -20,6 +21,39 @@ const RELAXED: PoseSpec = {
 };
 
 const features = (spec: PoseSpec) => poseFeatures(buildPose(spec))!;
+
+/** Camera-relative shoulders and hips in meters. */
+function worldPose(yaw: number, lean: number): WorldPoints {
+  const turn = (yaw * Math.PI) / 180;
+  const pitch = (lean * Math.PI) / 180;
+  const x = 0.2 * Math.cos(turn);
+  const z = 0.2 * Math.sin(turn);
+  const y = -0.5 * Math.cos(pitch);
+  const depth = -0.5 * Math.sin(pitch);
+  return {
+    lShoulder: [x, y, depth + z],
+    rShoulder: [-x, y, depth - z],
+    lHip: [0.15, 0, 0],
+    rHip: [-0.15, 0, 0],
+  };
+}
+
+describe("3D body angles", () => {
+  it.each([[0, 0], [45, 20], [-45, -15], [150, 0]])("measures yaw %i° and lean %i°", (yaw, lean) => {
+    const angles = bodyAngles3d(worldPose(yaw, lean));
+    expect(angles.yawDeg).toBeCloseTo(yaw);
+    expect(angles.leanDeg).toBeCloseTo(lean);
+  });
+
+  it("can measure yaw without hips and skips degenerate or nonfinite points", () => {
+    const { lShoulder, rShoulder } = worldPose(45, 0);
+    expect(bodyAngles3d({ lShoulder, rShoulder }).yawDeg).toBeCloseTo(45);
+    expect(bodyAngles3d({ lShoulder, rShoulder }).leanDeg).toBeNull();
+    expect(bodyAngles3d({ lShoulder, rShoulder: lShoulder })).toEqual({ yawDeg: null, leanDeg: null });
+    expect(bodyAngles3d({ lShoulder: [NaN, 0, 0], rShoulder })).toEqual({ yawDeg: null, leanDeg: null });
+    expect(bodyAngles3d(undefined)).toEqual({ yawDeg: null, leanDeg: null });
+  });
+});
 
 describe("angles", () => {
   it("wraps differences into (-180, 180]", () => {
@@ -111,6 +145,41 @@ describe("pose matching", () => {
     delete live.lShin;
     delete live.rShin;
     expect(matchPose(live, template).score).toBe(100);
+  });
+});
+
+describe("3D pose matching", () => {
+  function matchTemplate(id: string, world?: WorldPoints) {
+    const template = getPoseTemplate(id).points;
+    const live = templateToImage(template, BOX, PORTRAIT);
+    return matchAll(live, template, BOX, PORTRAIT, "solo", world).pose!;
+  }
+
+  it("uses 3D turn in place of the 2D ratio and accepts either side", () => {
+    const legacy = matchTemplate("three-quarter");
+    const frontal = matchTemplate("three-quarter", worldPose(0, 0));
+    expect(legacy.score).toBe(100);
+    expect(frontal.score).toBeLessThan(legacy.score);
+    expect(frontal.compared).toBe(legacy.compared + 1);
+    expect(frontal.corrections[0]?.id).toBe("turn_side");
+    expect(matchTemplate("three-quarter", worldPose(45, 0)).score).toBe(100);
+    expect(matchTemplate("three-quarter", worldPose(-45, 0)).score).toBe(100);
+    expect(matchTemplate("relaxed-stand", worldPose(45, 0)).corrections[0]?.id).toBe("face_camera");
+  });
+
+  it("compares forward lean with the sitting and upright targets", () => {
+    expect(matchTemplate("sit-lean-in", worldPose(0, 0)).corrections[0]?.id).toBe("lean_forward");
+    expect(matchTemplate("sit-lean-in", worldPose(0, 20)).score).toBe(100);
+    expect(matchTemplate("sit-lean-in", worldPose(0, 40)).corrections[0]?.id).toBe("straighten_up");
+    expect(matchTemplate("relaxed-stand", worldPose(0, 20)).corrections[0]?.id).toBe("straighten_up");
+  });
+
+  it("keeps 2D matching with unusable depth or a target without 3D measurements", () => {
+    expect(matchTemplate("three-quarter", {})).toEqual(matchTemplate("three-quarter"));
+    const custom = { ...getPoseTemplate("three-quarter").points };
+    const live = templateToImage(custom, BOX, PORTRAIT);
+    expect(matchAll(live, custom, BOX, PORTRAIT, "solo", worldPose(0, 0)))
+      .toEqual(matchAll(live, custom, BOX, PORTRAIT, "solo"));
   });
 });
 
