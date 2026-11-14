@@ -30,7 +30,7 @@ import {
   type SpeakRequest,
   type VoteRequest,
 } from "./contracts";
-import { SAMPLE_PLAN_PERSON, sampleReview } from "./fixtures";
+import { samplePlan, sampleReview } from "./fixtures";
 
 export class ApiFailure extends Error {
   constructor(
@@ -95,7 +95,7 @@ export const api = {
     try {
       return await post("/api/analyze", req, AnalyzeResponse);
     } catch {
-      return { plan: SAMPLE_PLAN_PERSON, mock: true };
+      return { plan: samplePlan(req.lang), mock: true };
     }
   },
 

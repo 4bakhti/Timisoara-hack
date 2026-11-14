@@ -65,6 +65,59 @@ export const SAMPLE_PLAN_PERSON: ShotPlan = {
   ],
 };
 
+/** The same sample scene in Romanian, so the Romanian interface never shows English samples. */
+export const SAMPLE_PLAN_PERSON_RO: ShotPlan = {
+  scene: {
+    subject: "person",
+    light: { from: "left", note: "Lumină naturală blândă de la o fereastră din stânga." },
+    background: {
+      use: ["perete simplu în spatele persoanei", "rama ferestrei din stânga"],
+      avoid: ["ușa luminoasă din marginea dreaptă", "raftul aglomerat"],
+    },
+    space: "Aproximativ doi metri de spațiu liber în fața peretelui.",
+  },
+  ideas: [
+    {
+      ...SAMPLE_PLAN_PERSON.ideas[0],
+      title: "Portret în lumina ferestrei",
+      why: "Lumina din lateral modelează fața; peretele simplu ține atenția pe persoană.",
+      photographer: {
+        ...SAMPLE_PLAN_PERSON.ideas[0].photographer,
+        say: "Apropie-te și încadrează de la talie în sus, cu fereastra chiar în afara cadrului.",
+      },
+      subject: { say: "Întoarce-te ușor spre fereastră și încrucișează lejer brațele.", poseTemplateId: "arms-crossed" },
+      usesFromScene: ["lumina ferestrei din stânga", "peretele simplu"],
+    },
+    {
+      ...SAMPLE_PLAN_PERSON.ideas[1],
+      title: "Relaxat, din cap până în picioare",
+      why: "Spațiul liber în partea în care privește persoana face cadrul calm și echilibrat.",
+      photographer: {
+        ...SAMPLE_PLAN_PERSON.ideas[1].photographer,
+        say: "Fă doi pași în spate și așază persoana pe treimea din dreapta a cadrului.",
+      },
+      subject: { say: "Mâinile în buzunare, greutatea pe un picior, privește spre fereastră.", poseTemplateId: "hands-in-pockets" },
+      usesFromScene: ["spațiul liber din fața peretelui", "fereastra din stânga, spre care privește persoana"],
+    },
+    {
+      ...SAMPLE_PLAN_PERSON.ideas[2],
+      title: "De jos, cu încredere",
+      why: "Fotografiată puțin de jos, o poziție în picioare pare mai înaltă și mai sigură.",
+      photographer: {
+        ...SAMPLE_PLAN_PERSON.ideas[2].photographer,
+        say: "Coboară telefonul la nivelul pieptului și înclină-l ușor în sus. Ține ușa în afara cadrului.",
+      },
+      subject: { say: "O mână în șold, bărbia dreaptă, privirea spre cameră.", poseTemplateId: "hand-on-hip" },
+      usesFromScene: ["peretele simplu ca fundal curat", "ușa din dreapta, de scos din cadru"],
+    },
+  ],
+};
+
+/** The sample plan in the interface language. */
+export function samplePlan(lang: Lang): ShotPlan {
+  return lang === "ro" ? SAMPLE_PLAN_PERSON_RO : SAMPLE_PLAN_PERSON;
+}
+
 /** A scene without a person: a cup on a table. No pose, framing only. */
 export const SAMPLE_PLAN_OBJECT: ShotPlan = {
   scene: {

@@ -1,5 +1,5 @@
 import { AnalyzeRequest, ShotPlan, type AnalyzeResponse } from "@/lib/contracts";
-import { SAMPLE_PLAN_PERSON } from "@/lib/fixtures";
+import { samplePlan } from "@/lib/fixtures";
 import { env } from "@/server/env";
 import { generateJson } from "@/server/gemini";
 import { clientKey, fail, RateLimiter, readBody } from "@/server/http";
@@ -17,7 +17,7 @@ export async function POST(request: Request) {
   if ("response" in body) return body.response;
   const { image, lang, mode } = body.data;
 
-  const sample: AnalyzeResponse = { plan: SAMPLE_PLAN_PERSON, mock: true };
+  const sample: AnalyzeResponse = { plan: samplePlan(lang), mock: true };
   const key = env.geminiKey();
   if (!key) return Response.json(sample);
 
