@@ -7,6 +7,7 @@
  */
 import type { Box, CoachMode, PosePoints } from "@/lib/contracts";
 import type { PhraseId } from "@/coach/phrases";
+import type { WorldPoints } from "./types";
 import {
   angleDiff,
   bodyPlacement,
@@ -246,7 +247,10 @@ export function matchAll(
   box: Box,
   aspect: number,
   mode: CoachMode,
+  /** Live 3D points. TO USE (Person C): body turn and forward lean that 2D cannot see. */
+  world?: WorldPoints,
 ): { pose: PoseMatch | null; framing: FramingMatch | null } {
+  void world;
   const liveFeatures = poseFeatures(toIsotropic(live, aspect));
   const templateFeatures = poseFeatures(template);
   return {

@@ -7,6 +7,7 @@
 import type { Point2, PosePointName } from "@/lib/contracts";
 import { POSE_POINT_NAMES } from "@/lib/contracts";
 import type { LivePoints } from "./geometry";
+import type { PoseModelName, SilhouetteMask, WorldPoints } from "./types";
 
 type Vision = typeof import("@mediapipe/tasks-vision");
 type Landmarker = import("@mediapipe/tasks-vision").PoseLandmarker;
@@ -43,11 +44,17 @@ export interface TrackedPose {
   /** Raw points for every joint, even uncertain or off-frame ones. For crop checks. */
   all: Record<PosePointName, Point2>;
   visibility: Record<PosePointName, number>;
+  /** Real 3D positions in metres (MediaPipe world landmarks). TO BUILD (Person A). */
+  world?: WorldPoints;
+  /** Where the person is, as a small mask. TO BUILD (Person A); only on some frames is fine. */
+  mask?: SilhouetteMask;
 }
 
 export interface PoseTracker {
   /** Call once per video frame, with increasing timestamps (ms). */
   detectVideo(video: HTMLVideoElement, timeMs: number): TrackedPose | null;
+  /** Which model is running now. TO BUILD (Person A): start on "full", drop to "lite" when the phone is too slow. */
+  readonly model: PoseModelName;
   close(): void;
 }
 
@@ -123,12 +130,19 @@ export async function createPoseTracker(): Promise<PoseTracker> {
       lastTime = t;
       return toTrackedPose(landmarker.detectForVideo(video, t).landmarks[0]);
     },
+    model: "lite",
     close: () => landmarker.close(),
   };
 }
 
+export interface StillTrackerOptions {
+  /** Also return the person's mask (needed for target silhouettes from AI previews). TO BUILD (Person A). */
+  withMask?: boolean;
+}
+
 /** Tracker for single photos (the "before" picture, the lab, demo stills). */
-export async function createStillTracker(): Promise<StillTracker> {
+export async function createStillTracker(options: StillTrackerOptions = {}): Promise<StillTracker> {
+  void options;
   const landmarker = await createLandmarker("IMAGE");
   return {
     detect: (image) => toTrackedPose(landmarker.detect(image).landmarks[0]),

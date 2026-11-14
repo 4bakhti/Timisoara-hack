@@ -1,4 +1,5 @@
 import type { CoachMode, Lang, ShotIdea, ShotScore } from "@/lib/contracts";
+import type { CustomTarget } from "@/vision/types";
 import type { PhraseId } from "./phrases";
 
 /**
@@ -28,6 +29,18 @@ export interface CoachInstruction {
   to: "subject" | "photographer" | "anyone";
 }
 
+/** Live measurements for the lab page and phone tuning. Values are null when not available. */
+export interface CoachDebug {
+  model: string | null;
+  bodyYawDeg: number | null;
+  leanDeg: number | null;
+  eyesOpen: number | null;
+  smile: number | null;
+  headYawDeg: number | null;
+  headPitchDeg: number | null;
+  silhouette: boolean;
+}
+
 export interface CoachState {
   phase: CoachPhase;
   /** Overall match, 0–100. */
@@ -46,6 +59,8 @@ export interface CoachState {
    * start on this device: the guides are still drawn and captureNow() still works.
    */
   error: string | null;
+  /** Live measurements for phone tuning (see CoachDebug). */
+  debug?: CoachDebug;
 }
 
 export interface CapturedShot {
@@ -95,6 +110,11 @@ export interface CoachSessionOptions {
   voice?: boolean;
   /** Optional owner of both correction and countdown audio. */
   speech?: CoachSpeech;
+  /**
+   * Coach toward a pose taken from an AI preview instead of the idea's template.
+   * Keep the object stable (useMemo): a new object restarts the session.
+   */
+  target?: CustomTarget;
   /** Stop coaching without tearing the session down. */
   paused?: boolean;
   /**
@@ -127,6 +147,7 @@ export interface EngineConfig {
   mirrored: boolean;
   voice: boolean;
   speech?: CoachSpeech;
+  target?: CustomTarget;
   emit: (patch: Partial<CoachState>) => void;
   onCapture: (shot: CapturedShot) => void;
 }

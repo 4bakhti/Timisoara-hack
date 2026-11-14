@@ -6,5 +6,7 @@ export { grabFrame, shrinkImage, sourceSize, type FrameSource, type GrabbedFrame
 export { requestMotionPermission, watchLevel } from "./level";
 export { scoreStill, computeShotScore, type ScoreInput } from "./score";
 export { matchAll, matchFraming, matchPose, type Correction, type FramingMatch, type PoseMatch } from "./match";
-export { poseFeatures, templateToImage, toIsotropic, type LivePoints, type PoseFeatures } from "./geometry";
-export { createPoseTracker, createStillTracker, hasTorso, type TrackedPose } from "./tracker";
+export { bodyAngles3d, poseFeatures, templateToImage, toIsotropic, type LivePoints, type PoseFeatures } from "./geometry";
+export { createPoseTracker, createStillTracker, hasTorso, type StillTrackerOptions, type TrackedPose } from "./tracker";
+export { createFaceTracker, type FaceTracker } from "./face";
+export type { CustomTarget, FaceSignals, Limb, Point3, PoseModelName, SilhouetteMask, WorldPoints } from "./types";

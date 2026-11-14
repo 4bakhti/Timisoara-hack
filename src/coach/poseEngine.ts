@@ -5,7 +5,9 @@
  */
 import type { PosePointName } from "@/lib/contracts";
 import {
+  bodyAngles3d,
   computeShotScore,
+  createFaceTracker,
   coverMap,
   createPoseTracker,
   drawGuides,
@@ -16,27 +18,40 @@ import {
   sourceSize,
   syncCanvas,
   watchLevel,
+  type FaceSignals,
+  type FaceTracker,
   type LivePoints,
   type TrackedPose,
 } from "@/vision";
 import { getStillTracker } from "@/vision/score";
 import type { PoseTracker } from "@/vision/tracker";
 import { CoachBrain, levelScore } from "./brain";
+import { limbForPhrase } from "./limbs";
 import { cancelCoachSpeech, captureRejection, clearOverlay, createRecorder, playCoachLine, toInstruction } from "./engineShared";
 import type { CoachCaptureResult, Engine, EngineConfig } from "./types";
 
 const MIN_FRAME_MS = 30;
 const SMOOTHING = 0.5;
 const KEEP_MISSING_MS = 250;
+/** Face tracking only runs near a match, every other frame, to save the phone's power. */
+const FACE_FROM_SCORE = 70;
+const FACE_KEEP_MS = 600;
 
 export function createPoseEngine(cfg: EngineConfig): Engine {
-  const template = getPoseTemplate(cfg.idea.subject?.poseTemplateId);
-  const box = cfg.idea.framing.subjectBox;
+  // A target taken from an AI preview replaces the template and the planner's box.
+  const template = cfg.target ? { points: cfg.target.points } : getPoseTemplate(cfg.idea.subject?.poseTemplateId);
+  const box = cfg.target?.box ?? cfg.idea.framing.subjectBox;
   const brain = new CoachBrain({ mode: cfg.mode, expectPose: Boolean(cfg.idea.subject) });
   const recorder = createRecorder(cfg);
   const isVideo = cfg.source instanceof HTMLVideoElement;
 
   let tracker: PoseTracker | null = null;
+  let faceTracker: FaceTracker | null = null;
+  let face: FaceSignals | null = null;
+  let faceAt = 0;
+  let frame = 0;
+  let lastScore = 0;
+  let lastPhase = "loading";
   let stillPose: TrackedPose | null = null;
   let trackerFailed = false;
   let stopLevel: () => void = () => undefined;
@@ -70,7 +85,7 @@ export function createPoseEngine(cfg: EngineConfig): Engine {
     return next;
   };
 
-  const draw = (points: LivePoints | null, score: number) => {
+  const draw = (points: LivePoints | null, score: number, pose: TrackedPose | null = null, highlight: ReturnType<typeof limbForPhrase>[] = []) => {
     const canvas = cfg.overlay;
     const ctx = canvas?.getContext("2d");
     if (!canvas || !ctx) return;
@@ -83,6 +98,9 @@ export function createPoseEngine(cfg: EngineConfig): Engine {
       live: points ?? undefined,
       score,
       levelErrorDeg: cfg.mode === "friend" ? levelError : undefined,
+      silhouette: points ? pose?.mask : undefined,
+      targetSilhouette: cfg.target?.silhouette,
+      highlight: highlight.filter((limb): limb is NonNullable<typeof limb> => limb !== null),
     });
   };
 
@@ -110,6 +128,7 @@ export function createPoseEngine(cfg: EngineConfig): Engine {
         aspect: size.width / Math.max(1, size.height),
         level: levelScore(levelError),
         image: cfg.source,
+        target: cfg.target ? { points: template.points, box } : undefined,
       });
       captured = true;
       cfg.emit({ phase: "captured", countdown: null, instruction: toInstruction("got_it", cfg), error: null });
@@ -162,7 +181,21 @@ export function createPoseEngine(cfg: EngineConfig): Engine {
     const points = smoothPoints(pose?.points ?? {}, now);
     const visible = hasTorso(points);
     const aspect = size.width / size.height;
-    const measured = visible ? matchAll(points, template.points, box, aspect, cfg.mode) : { pose: null, framing: null };
+    const measured = visible ? matchAll(points, template.points, box, aspect, cfg.mode, pose?.world) : { pose: null, framing: null };
+
+    // Face signals near a match only, every other frame; keep the last reading briefly.
+    frame += 1;
+    const nearMatch = lastScore >= FACE_FROM_SCORE || lastPhase === "holding" || lastPhase === "countdown";
+    if (faceTracker && visible && nearMatch && frame % 2 === 0) {
+      try {
+        face = faceTracker.detectVideo(cfg.source as HTMLVideoElement, now);
+        faceAt = now;
+      } catch {
+        face = null;
+      }
+    } else if (now - faceAt > FACE_KEEP_MS) {
+      face = null;
+    }
 
     const decision = brain.update({
       now,
@@ -170,7 +203,10 @@ export function createPoseEngine(cfg: EngineConfig): Engine {
       pose: measured.pose,
       framing: measured.framing,
       levelError,
+      face,
     });
+    lastScore = decision.score;
+    lastPhase = decision.phase;
 
     if (decision.capture) {
       void capture(false);
@@ -186,6 +222,15 @@ export function createPoseEngine(cfg: EngineConfig): Engine {
       fps: Math.round(fps),
       simulated: false,
       error: null,
+      debug: {
+        model: tracker ? tracker.model : isVideo ? null : "still",
+        ...roundAngles(bodyAngles3d(pose?.world)),
+        eyesOpen: roundTo(face?.eyesOpen, 2),
+        smile: roundTo(face?.smile, 2),
+        headYawDeg: roundTo(face?.yawDeg, 0),
+        headPitchDeg: roundTo(face?.pitchDeg, 0),
+        silhouette: Boolean(pose?.mask),
+      },
     });
     if (decision.speak) {
       const kind = decision.phase === "holding" || decision.phase === "countdown" ? "countdown" : "correction";
@@ -198,7 +243,8 @@ export function createPoseEngine(cfg: EngineConfig): Engine {
       instruction: decision.instruction,
       fps: Math.round(fps),
     });
-    draw(visible ? points : null, decision.score);
+    const highlight = decision.phase === "coaching" ? [limbForPhrase(decision.instruction)] : [];
+    draw(visible ? points : null, decision.score, pose, highlight);
   };
 
   const boot = async () => {
@@ -206,6 +252,8 @@ export function createPoseEngine(cfg: EngineConfig): Engine {
     try {
       if (isVideo) {
         tracker = await createPoseTracker();
+        // Optional: face tracking. Coaching works without it.
+        faceTracker = await createFaceTracker().catch(() => null);
       } else {
         stillPose = (await getStillTracker()).detect(cfg.source as HTMLImageElement);
       }
@@ -216,6 +264,8 @@ export function createPoseEngine(cfg: EngineConfig): Engine {
     if (stopped) {
       tracker?.close();
       tracker = null;
+      faceTracker?.close();
+      faceTracker = null;
       return;
     }
     stopLevel = watchLevel((error) => {
@@ -236,6 +286,8 @@ export function createPoseEngine(cfg: EngineConfig): Engine {
       stopLevel();
       tracker?.close();
       tracker = null;
+      faceTracker?.close();
+      faceTracker = null;
       cancelCoachSpeech(cfg);
       clearOverlay(cfg.overlay);
       if (!captured) recorder.flush("abandoned");
@@ -244,4 +296,14 @@ export function createPoseEngine(cfg: EngineConfig): Engine {
       return capture(true, signal);
     },
   };
+}
+
+function roundTo(value: number | null | undefined, digits: number): number | null {
+  if (value === null || value === undefined || Number.isNaN(value)) return null;
+  const f = 10 ** digits;
+  return Math.round(value * f) / f;
+}
+
+function roundAngles(a: { yawDeg: number | null; leanDeg: number | null }): { bodyYawDeg: number | null; leanDeg: number | null } {
+  return { bodyYawDeg: roundTo(a.yawDeg, 0), leanDeg: roundTo(a.leanDeg, 0) };
 }

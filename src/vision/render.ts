@@ -9,6 +9,7 @@
  */
 import type { Box, Point2, PosePointName, PosePoints } from "@/lib/contracts";
 import { headRadiusFor } from "./poses/build";
+import type { Limb, SilhouetteMask } from "./types";
 
 export const BONES: ReadonlyArray<readonly [PosePointName, PosePointName]> = [
   ["lShoulder", "rShoulder"],
@@ -78,6 +79,12 @@ export interface GuideFrame {
   score?: number;
   /** Phone roll error in degrees; draws a level line when it is a number. */
   levelErrorDeg?: number | null;
+  /** The live person's outline. TO BUILD (Person A): a soft glow, green when the score is high. */
+  silhouette?: SilhouetteMask;
+  /** The target outline from an AI preview, in image coordinates. TO BUILD (Person A): dashed. */
+  targetSilhouette?: SilhouetteMask;
+  /** Body parts the coach is asking about. TO BUILD (Person A): draw them in a warning colour. */
+  highlight?: Limb[];
 }
 
 /** Keeps the canvas bitmap in step with its CSS size. Returns the CSS size. */

@@ -15,6 +15,7 @@
  */
 import type { CoachMode } from "@/lib/contracts";
 import type { Correction, FramingMatch, PoseMatch } from "@/vision/match";
+import type { FaceSignals } from "@/vision/types";
 import { phraseAudience, type PhraseId } from "./phrases";
 import type { CoachPhase } from "./types";
 
@@ -27,6 +28,8 @@ export interface Measurement {
   framing: FramingMatch | null;
   /** Phone roll away from level, in degrees. null when the device gives no reading. */
   levelError: number | null;
+  /** Face signals near a match (null when unknown). TO USE (Person C): e.g. never shoot with closed eyes. */
+  face?: FaceSignals | null;
 }
 
 export interface Decision {

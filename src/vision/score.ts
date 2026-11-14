@@ -7,7 +7,7 @@
  * the template), crop (no limb cut at a joint), light (the face is not much
  * darker than the rest), level (the phone was held straight).
  */
-import type { CoachMode, PosePointName, ShotIdea, ShotScore } from "@/lib/contracts";
+import type { Box, CoachMode, PosePointName, PosePoints, ShotIdea, ShotScore } from "@/lib/contracts";
 import { poseFeatures, toIsotropic, torsoFrame } from "./geometry";
 import { matchFraming, matchPose } from "./match";
 import { getPoseTemplate } from "./poses/catalog";
@@ -102,18 +102,21 @@ export interface ScoreInput {
   level: number | null;
   /** The picture itself, for the light check. Optional. */
   image?: Drawable;
+  /** Score against a target taken from an AI preview instead of the idea's template and box. */
+  target?: { points: PosePoints; box: Box };
 }
 
 export function computeShotScore(input: ScoreInput): ShotScore {
   const { pose, idea, mode, aspect } = input;
-  const template = getPoseTemplate(idea.subject?.poseTemplateId);
+  const template = input.target ? { points: input.target.points } : getPoseTemplate(idea.subject?.poseTemplateId);
+  const box = input.target?.box ?? idea.framing.subjectBox;
   const person = pose && hasTorso(pose.points) ? pose : null;
 
   // Without a subject the tracker has nothing to measure framing against: report it as not measured.
   const framing = !idea.subject
     ? null
     : person
-      ? (matchFraming(person.points, template.points, idea.framing.subjectBox, aspect, mode)?.score ?? 0)
+      ? (matchFraming(person.points, template.points, box, aspect, mode)?.score ?? 0)
       : 0;
 
   let poseScore: number | null = null;
@@ -169,7 +172,12 @@ function loadImage(src: string): Promise<HTMLImageElement> {
  * Returns null when nothing could be measured (an idea without a person), so the
  * interface shows "not measured" instead of a misleading 0.
  */
-export async function scoreStill(src: string, idea: ShotIdea, mode: CoachMode = "friend"): Promise<ShotScore | null> {
+export async function scoreStill(
+  src: string,
+  idea: ShotIdea,
+  mode: CoachMode = "friend",
+  target?: { points: PosePoints; box: Box },
+): Promise<ShotScore | null> {
   const image = await loadImage(src);
   const tracker = await getStillTracker();
   const pose = tracker.detect(image);
@@ -180,6 +188,7 @@ export async function scoreStill(src: string, idea: ShotIdea, mode: CoachMode = 
     aspect: image.naturalWidth / Math.max(1, image.naturalHeight),
     level: null,
     image,
+    target,
   });
   return isMeasured(score) ? score : null;
 }

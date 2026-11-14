@@ -119,8 +119,34 @@ export default function LabLivePage() {
             <span className="rounded-full bg-black/60 px-3 py-1 text-lg font-semibold tabular-nums" data-testid="score">
               {session.score}
             </span>
-            <span className="opacity-70">{session.fps} fps</span>
+            <span className="opacity-70">
+              {session.fps} fps · {session.debug?.model ?? "–"}
+            </span>
           </div>
+        )}
+
+        {live && !shot && session.debug && (
+          <dl
+            className="absolute inset-x-2 top-14 grid grid-cols-4 gap-x-2 gap-y-0.5 rounded-lg bg-black/60 p-2 text-[11px] tabular-nums"
+            data-testid="debug"
+          >
+            {(
+              [
+                ["body turn", session.debug.bodyYawDeg, "°"],
+                ["lean", session.debug.leanDeg, "°"],
+                ["eyes", session.debug.eyesOpen, ""],
+                ["smile", session.debug.smile, ""],
+                ["head turn", session.debug.headYawDeg, "°"],
+                ["head tilt", session.debug.headPitchDeg, "°"],
+                ["outline", session.debug.silhouette ? "on" : "off", ""],
+              ] as const
+            ).map(([label, value, unit]) => (
+              <div key={label} className="contents">
+                <dt className="opacity-60">{label}</dt>
+                <dd>{value === null ? "–" : `${value}${unit}`}</dd>
+              </div>
+            ))}
+          </dl>
         )}
       </div>
 
