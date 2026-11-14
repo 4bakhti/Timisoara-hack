@@ -339,7 +339,7 @@ export function ShootFlow() {
             >
               {instruction}
             </p>
-            <button className={secondary} onClick={session.captureNow}>
+            <button className="w-full rounded-full bg-white px-5 py-3 text-base font-semibold text-black active:scale-[0.98]" onClick={session.captureNow}>
               {t("shutter", lang)}
             </button>
           </div>

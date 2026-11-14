@@ -114,8 +114,8 @@ export function drawGuides(ctx: CanvasRenderingContext2D, frame: GuideFrame): vo
     const pts = placeTemplate(frame.ghost, frame.targetBox, map);
     const figureHeight = frame.targetBox.h * map.imgH * map.scale;
     drawFigure(ctx, pts, {
-      width: Math.max(5, figureHeight * 0.034),
-      colour: ghostColour(score, 0.62),
+      width: Math.max(4, figureHeight * 0.016),
+      colour: ghostColour(score, 0.8),
       headRadius: headRadiusFor(frame.ghost) * figureHeight,
       glow: true,
     });
