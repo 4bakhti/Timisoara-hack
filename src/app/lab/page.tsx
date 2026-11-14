@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { BONES, POSE_TEMPLATES, headRadiusFor } from "@/vision";
 import type { PoseTemplate } from "@/lib/contracts";
 
@@ -11,6 +12,10 @@ export default function LabPage() {
       <p className="mt-1 text-sm opacity-70">
         {POSE_TEMPLATES.length} templates. Drawn as the camera sees them: the person&apos;s left is on the
         right.
+      </p>
+      <p className="mt-3 flex gap-4 text-sm underline">
+        <Link href="/lab/live">Live camera test</Link>
+        <Link href="/lab/try">Try the coach on a picture</Link>
       </p>
       <ul className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
         {POSE_TEMPLATES.map((t) => (
