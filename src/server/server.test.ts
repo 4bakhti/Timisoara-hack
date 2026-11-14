@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { GuideResponse, ReviewResponse, ShotPlan } from "@/lib/contracts";
 import { SAMPLE_PLAN_PERSON } from "@/lib/fixtures";
-import { jsonSchemaFor, splitDataUrl } from "./gemini";
+import { isTransient, jsonSchemaFor, modelForAttempt, splitDataUrl } from "./gemini";
 import { RateLimiter } from "./http";
 import { tidyBox, tidyPlan } from "./plan";
 import { analyzeSystem, analyzeUser, guideSystem, reviewSystem } from "./prompts";
@@ -85,5 +85,23 @@ describe("prompts", () => {
     expect(text).toContain("relaxed-stand");
     expect(text).toContain("arms-crossed");
     expect(analyzeUser("solo")).toContain("propped up");
+  });
+});
+
+describe("retry policy", () => {
+  it("treats overload, rate limits and timeouts as transient, and bad requests as not", () => {
+    expect(isTransient(new Error('{"error":{"code":503,"message":"This model is currently experiencing high demand.","status":"UNAVAILABLE"}}'))).toBe(true);
+    expect(isTransient(new Error("This operation was aborted"))).toBe(true);
+    expect(isTransient(new Error("429 RESOURCE_EXHAUSTED"))).toBe(true);
+    expect(isTransient(new Error('{"error":{"code":400,"status":"INVALID_ARGUMENT"}}'))).toBe(false);
+    expect(isTransient(new Error("models/x is not found (404)"))).toBe(false);
+  });
+
+  it("moves to the fallback model straight after a transient error, and for the last attempt", () => {
+    expect(modelForAttempt(0, false, "main", "backup")).toBe("main");
+    expect(modelForAttempt(1, false, "main", "backup")).toBe("main");
+    expect(modelForAttempt(1, true, "main", "backup")).toBe("backup");
+    expect(modelForAttempt(2, false, "main", "backup")).toBe("backup");
+    expect(modelForAttempt(2, true, "main")).toBe("main");
   });
 });

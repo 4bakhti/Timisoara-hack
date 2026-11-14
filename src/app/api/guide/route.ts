@@ -23,6 +23,7 @@ export async function POST(request: Request) {
 
   const answer = await generateJson(key, {
     model: env.geminiFastModel(),
+    fallbackModel: env.geminiFallbackModel(),
     system: guideSystem(lang),
     text: guideUser(idea),
     images: [frame],

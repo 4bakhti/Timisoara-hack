@@ -23,6 +23,7 @@ export async function POST(request: Request) {
 
   const review = await generateJson(key, {
     model: env.geminiModel(),
+    fallbackModel: env.geminiFallbackModel(),
     system: reviewSystem(lang),
     text: reviewUser(idea, scores),
     images: [before, after],

@@ -25,6 +25,7 @@ export async function POST(request: Request) {
   const model = env.geminiModel();
   const plan = await generateJson(key, {
     model,
+    fallbackModel: env.geminiFallbackModel(),
     system: analyzeSystem(lang),
     text: analyzeUser(mode),
     images: [image],

@@ -41,7 +41,28 @@ export interface JsonCall<T> {
   schema: ZodType<T>;
   timeoutMs: number;
   temperature?: number;
+  /** Used for the last attempt, and right away when the main model is overloaded. */
+  fallbackModel?: string;
 }
+
+/** Overloaded, rate-limited or timed out: worth trying again, possibly on another model. */
+export function isTransient(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return /\b(429|500|502|503|504)\b|UNAVAILABLE|RESOURCE_EXHAUSTED|high demand|overloaded|aborted|timed? ?out/i.test(message);
+}
+
+/**
+ * Which model each attempt uses. Attempts 1 and 2 use the main model, the last uses the
+ * fallback; after a transient error the fallback is tried straight away.
+ */
+export function modelForAttempt(attempt: number, lastErrorTransient: boolean, model: string, fallback?: string): string {
+  if (!fallback) return model;
+  if (attempt === 0) return model;
+  if (attempt === 1) return lastErrorTransient ? fallback : model;
+  return fallback;
+}
+
+const MAX_ATTEMPTS = 3;
 
 export async function generateJson<T>(apiKey: string, call: JsonCall<T>): Promise<T | null> {
   const images = call.images.map(splitDataUrl);
@@ -50,37 +71,37 @@ export async function generateJson<T>(apiKey: string, call: JsonCall<T>): Promis
   const schema = jsonSchemaFor(call.schema);
   const deadline = Date.now() + call.timeoutMs;
   let correction = "";
+  let lastErrorTransient = false;
 
-  for (let attempt = 0; attempt < 2; attempt++) {
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     const remaining = deadline - Date.now();
-    if (remaining < 800) break;
-    // The second attempt describes the schema in words instead of passing it, in case the
-    // API rejected the schema itself.
-    const strict = attempt === 0;
-    const text = strict
-      ? call.text + correction
-      : `${call.text}${correction}\n\nAnswer with JSON only, matching this JSON Schema exactly:\n${JSON.stringify(schema)}`;
+    if (remaining < 1500) break;
+    const model = modelForAttempt(attempt, lastErrorTransient, call.model, call.fallbackModel);
     try {
       const response = await getClient(apiKey).models.generateContent({
-        model: call.model,
-        contents: [{ role: "user", parts: [...imageParts, { text }] }],
+        model,
+        contents: [{ role: "user", parts: [...imageParts, { text: call.text + correction }] }],
         config: {
           systemInstruction: call.system,
           responseMimeType: "application/json",
-          ...(strict ? { responseJsonSchema: schema } : {}),
+          responseJsonSchema: schema,
           temperature: call.temperature ?? 0.7,
           abortSignal: AbortSignal.timeout(remaining),
         },
       });
+      lastErrorTransient = false;
       const parsed = call.schema.safeParse(JSON.parse(response.text ?? ""));
       if (parsed.success) return parsed.data;
       correction = `\n\nYour previous answer was rejected for these reasons:\n${z.prettifyError(parsed.error)}\nAnswer again and fix exactly these.`;
+      console.error(`[gemini] ${model} attempt ${attempt + 1}: answer did not match the schema`);
     } catch (error) {
-      // Provider error messages can include request details or unvalidated model output.
+      lastErrorTransient = isTransient(error);
+      // Provider error messages can include request details or unvalidated model output,
+      // so only the status and whether the error is worth retrying are logged.
       const status = error instanceof Error && "status" in error && typeof error.status === "number"
-        ? " HTTP " + error.status
+        ? ` HTTP ${error.status}`
         : "";
-      console.error("[gemini] " + call.model + " attempt " + (attempt + 1) + " failed." + status);
+      console.error(`[gemini] ${model} attempt ${attempt + 1} failed.${status}${lastErrorTransient ? " (overloaded or timed out)" : ""}`);
     }
   }
   return null;
