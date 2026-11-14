@@ -11,7 +11,7 @@ import type { Box, CoachMode, PosePointName, PosePoints, ShotIdea, ShotScore } f
 import { poseFeatures, toIsotropic, torsoFrame } from "./geometry";
 import { matchFraming, matchPose } from "./match";
 import { getPoseTemplate } from "./poses/catalog";
-import { createStillTracker, hasTorso, type StillTracker, type TrackedPose } from "./tracker";
+import { createStillTracker, hasUpperBody, type StillTracker, type TrackedPose } from "./tracker";
 
 const WEIGHTS = { pose: 0.4, framing: 0.3, crop: 0.1, light: 0.1, level: 0.1 } as const;
 
@@ -110,7 +110,7 @@ export function computeShotScore(input: ScoreInput): ShotScore {
   const { pose, idea, mode, aspect } = input;
   const template = input.target ? { points: input.target.points } : getPoseTemplate(idea.subject?.poseTemplateId);
   const box = input.target?.box ?? idea.framing.subjectBox;
-  const person = pose && hasTorso(pose.points) ? pose : null;
+  const person = pose && hasUpperBody(pose.points) ? pose : null;
 
   // Without a subject the tracker has nothing to measure framing against: report it as not measured.
   const framing = !idea.subject

@@ -5,9 +5,9 @@ export { BONES, coverMap, drawGuides, placeTemplate, syncCanvas, type GuideFrame
 export { grabFrame, shrinkImage, sourceSize, type FrameSource, type GrabbedFrame, type GrabOptions } from "./frame";
 export { requestMotionPermission, watchLevel } from "./level";
 export { scoreStill, computeShotScore, comparableScores, type ScoreInput } from "./score";
-export { matchAll, matchFraming, matchPose, type Correction, type FramingMatch, type PoseMatch } from "./match";
+export { anchoredBox, matchAll, matchFraming, matchPose, type Correction, type FramingMatch, type PoseMatch } from "./match";
 export { bodyAngles3d, poseFeatures, templateToImage, toIsotropic, type LivePoints, type PoseFeatures } from "./geometry";
-export { createPoseTracker, createStillTracker, hasTorso, type StillTrackerOptions, type TrackedPose } from "./tracker";
+export { createPoseTracker, createStillTracker, hasTorso, hasUpperBody, type StillTrackerOptions, type TrackedPose } from "./tracker";
 export { createFaceTracker, type FaceTracker } from "./face";
 export { fitTargetToFrame, pictureAspect, targetFromPose, targetFromPreview } from "./fromPreview";
 export type { CustomTarget, FaceSignals, Limb, Point3, PoseModelName, SilhouetteMask, WorldPoints } from "./types";

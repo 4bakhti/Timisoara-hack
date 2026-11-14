@@ -425,3 +425,12 @@ export async function createStillTracker(options: StillTrackerOptions = {}): Pro
 export function hasTorso(points: LivePoints): boolean {
   return Boolean(points.lShoulder && points.rShoulder && points.lHip && points.rHip);
 }
+
+/**
+ * true when the coach can work with what it sees: both shoulders. The hips may
+ * be out of sight (sitting at a table, a shot cut at the waist); the torso is
+ * then estimated from the shoulders.
+ */
+export function hasUpperBody(points: LivePoints): boolean {
+  return Boolean(points.lShoulder && points.rShoulder);
+}

@@ -76,13 +76,24 @@ export interface TorsoFrame {
   length: number;
   /** Midpoint between shoulder line and hip line. */
   centre: Point2;
+  /** true when the hips were out of sight and the torso was estimated from the shoulders. */
+  estimated?: boolean;
 }
 
-/** The torso's position and axes, or null when shoulders or hips are not visible. */
+/** Shoulder line to hip line, as a multiple of shoulder width, for an adult facing the camera. */
+export const TORSO_PER_SHOULDER = 1.3;
+
+/**
+ * The torso's position and axes, or null without both shoulders. When the hips
+ * are out of sight (sitting at a table, a shot cut at the waist) the torso is
+ * estimated: straight down from the shoulder line, 1.3 shoulder widths long.
+ * Expects isotropic points for the estimate to be square.
+ */
 export function torsoFrame(p: LivePoints): TorsoFrame | null {
   const { lShoulder, rShoulder, lHip, rHip } = p;
-  if (!lShoulder || !rShoulder || !lHip || !rHip) return null;
+  if (!lShoulder || !rShoulder) return null;
   const shoulderMid = mid(lShoulder, rShoulder);
+  if (!lHip || !rHip) return estimatedTorso(lShoulder, rShoulder, shoulderMid);
   const hipMid = mid(lHip, rHip);
   const length = dist(shoulderMid, hipMid);
   if (length < 1e-6) return null;
@@ -91,6 +102,20 @@ export function torsoFrame(p: LivePoints): TorsoFrame | null {
   let left: Point2 = [down[1], -down[0]];
   if (dot(left, sub(lShoulder, rShoulder)) < 0) left = [-left[0], -left[1]];
   return { shoulderMid, hipMid, down, left, length, centre: mid(shoulderMid, hipMid) };
+}
+
+function estimatedTorso(lShoulder: Point2, rShoulder: Point2, shoulderMid: Point2): TorsoFrame | null {
+  const across = sub(lShoulder, rShoulder);
+  const width = Math.hypot(across[0], across[1]);
+  if (width < 1e-6) return null;
+  // Perpendicular to the shoulder line, pointing down the picture.
+  let down: Point2 = [-across[1] / width, across[0] / width];
+  if (down[1] < 0) down = [-down[0], -down[1]];
+  let left: Point2 = [down[1], -down[0]];
+  if (dot(left, across) < 0) left = [-left[0], -left[1]];
+  const length = width * TORSO_PER_SHOULDER;
+  const hipMid: Point2 = [shoulderMid[0] + down[0] * length, shoulderMid[1] + down[1] * length];
+  return { shoulderMid, hipMid, down, left, length, centre: mid(shoulderMid, hipMid), estimated: true };
 }
 
 /** Direction of the bone a→b relative to the torso: 0 = down, positive = outward. */
@@ -109,9 +134,11 @@ export function poseFeatures(p: LivePoints): PoseFeatures | null {
 
   // Lean: torso "up" against image "up". 0 = upright; positive when the shoulders
   // sit toward image right, which is the person's left when they face the camera.
-  features.lean = deg(Math.atan2(-frame.down[0], frame.down[1]));
-
-  if (p.lShoulder && p.rShoulder) features.turn = dist(p.lShoulder, p.rShoulder) / frame.length;
+  // An estimated torso hangs straight down by construction, so lean and turn say nothing.
+  if (!frame.estimated) {
+    features.lean = deg(Math.atan2(-frame.down[0], frame.down[1]));
+    if (p.lShoulder && p.rShoulder) features.turn = dist(p.lShoulder, p.rShoulder) / frame.length;
+  }
 
   if (p.nose) {
     const v = sub(p.nose, frame.shoulderMid);

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Box } from "@/lib/contracts";
 import { angleDiff, bodyAngles3d, jointBend, mirrorFeatures, poseFeatures, templateToImage } from "./geometry";
-import { JUDGE_FORWARD_LEAN, matchAll, matchFraming, matchPose } from "./match";
+import { anchoredBox, JUDGE_FORWARD_LEAN, matchAll, matchFraming, matchPose } from "./match";
 import { buildPose, type PoseSpec } from "./poses/build";
 import { POSE_TEMPLATES, getPoseTemplate } from "./poses/catalog";
 import type { WorldPoints } from "./types";
@@ -227,5 +227,42 @@ describe("framing", () => {
 
   it("returns null when the torso is not visible", () => {
     expect(matchFraming({ nose: [0.5, 0.2] }, template, BOX, PORTRAIT, "solo")).toBeNull();
+  });
+
+  it("counts close enough as right: a bit off-centre and smaller still scores 100 with nothing to say", () => {
+    const near = { x: BOX.x + 0.1, y: BOX.y + 0.05, w: BOX.w, h: BOX.h * 0.85 };
+    const framing = matchFraming(templateToImage(template, near, PORTRAIT), template, BOX, PORTRAIT, "friend");
+    expect(framing?.score).toBe(100);
+    expect(framing?.corrections).toEqual([]);
+  });
+
+  describe("upper-body shots (hips out of sight)", () => {
+    const upperBody = { x: 0.15, y: 0.12, w: 0.7, h: 0.88 }; // reaches the bottom: cut there on purpose
+    const closeUp = (box: Box) => {
+      const live: Partial<Record<keyof typeof template, [number, number]>> = { ...templateToImage(template, box, PORTRAIT) };
+      for (const name of ["lHip", "rHip", "lKnee", "rKnee", "lAnkle", "rAnkle"] as const) delete live[name];
+      return live;
+    };
+
+    it("coaches them instead of losing the person, and does not ask a close person to step back", () => {
+      const live = closeUp({ x: 0.15, y: 0.18, w: 0.7, h: 1.9 });
+      const { pose, framing } = matchAll(live, template, upperBody, PORTRAIT, "solo");
+      expect(pose?.score).toBeGreaterThanOrEqual(90);
+      expect(framing?.score).toBe(100);
+      expect(framing?.corrections).toEqual([]);
+    });
+
+    it("still asks for distance when the head is cut off", () => {
+      const live = closeUp({ x: 0.15, y: -0.02, w: 0.7, h: 1.9 });
+      expect(matchFraming(live, template, upperBody, PORTRAIT, "solo")?.corrections[0].id).toBe("step_back");
+    });
+  });
+
+  it("anchors the target figure on the live person's torso", () => {
+    const where = { x: 0.1, y: 0.15, w: 0.4, h: 0.7 };
+    const fit = anchoredBox(templateToImage(template, where, PORTRAIT), template, PORTRAIT)!;
+    expect(fit.y).toBeCloseTo(where.y, 5);
+    expect(fit.h).toBeCloseTo(where.h, 5);
+    expect(fit.x + fit.w / 2).toBeCloseTo(where.x + where.w / 2, 5);
   });
 });

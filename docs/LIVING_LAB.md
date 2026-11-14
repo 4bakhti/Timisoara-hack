@@ -14,6 +14,7 @@ How we test Framewise with people at the venue, and what we changed because of t
 
 | Round | When | Testers | What we saw | What we changed (commit) |
 |---|---|---|---|---|
+| Team pilot | Sat 14 Nov, 23:00 | Our team, on a phone at the venue | The target outline stayed at a fixed spot while the person moved, so it was hard to line up with. Framing scored 62–63 although the person fitted the frame, because only the AI's exact box counted. Sitting or upper-body shots were not coached: with the hips out of sight the app saw no person. | The outline now stands on the person (same torso place and size), so only arms and legs differ. Framing counts close enough as right and only asks for clear changes, a cut-off head, or cut-off feet in a full-length idea. With the hips hidden, the torso is estimated from the shoulders. (the commit that adds this row) |
 | `round-1` | | | | |
 | `round-2` | | | | |
 

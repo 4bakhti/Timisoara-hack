@@ -3,8 +3,9 @@
  * frame, compares it with the idea, lets the brain decide, speaks, draws the
  * guides, and takes the photo when everything matches.
  */
-import type { PosePointName } from "@/lib/contracts";
+import type { Box, PosePointName } from "@/lib/contracts";
 import {
+  anchoredBox,
   bodyAngles3d,
   computeShotScore,
   createFaceTracker,
@@ -13,7 +14,7 @@ import {
   drawGuides,
   getPoseTemplate,
   grabFrame,
-  hasTorso,
+  hasUpperBody,
   matchAll,
   sourceSize,
   syncCanvas,
@@ -39,6 +40,15 @@ const FACE_FROM_SCORE = 70;
 const FACE_KEEP_MS = 600;
 /** Below this frame rate the silhouette glow is skipped and only the skeleton is drawn. */
 const MIN_FPS_FOR_OUTLINE = 18;
+/** How quickly the target shape follows the person (share of the gap closed per frame). */
+const FOLLOW = 0.3;
+
+const easeBox = (from: Box, to: Box, k: number): Box => ({
+  x: from.x + k * (to.x - from.x),
+  y: from.y + k * (to.y - from.y),
+  w: from.w + k * (to.w - from.w),
+  h: from.h + k * (to.h - from.h),
+});
 
 export function createPoseEngine(cfg: EngineConfig): Engine {
   // A target taken from an AI preview replaces the template and the planner's box.
@@ -70,6 +80,8 @@ export function createPoseEngine(cfg: EngineConfig): Engine {
   let smooth: LivePoints = {};
   const seenAt: Partial<Record<PosePointName, number>> = {};
   let lastPose: TrackedPose | null = null;
+  /** Where the target shape is drawn: on the person's torso, eased between frames. null = at the idea's box. */
+  let ghostBox: Box | null = null;
 
   /** Steadies the points between frames and bridges very short dropouts. */
   const smoothPoints = (fresh: LivePoints, now: number): LivePoints => {
@@ -103,6 +115,7 @@ export function createPoseEngine(cfg: EngineConfig): Engine {
     drawGuides(ctx, {
       map: coverMap(size.width || view.width, size.height || view.height, view.width, view.height),
       targetBox: box,
+      ghostBox: points ? (ghostBox ?? undefined) : undefined,
       ghost: cfg.idea.subject ? template.points : undefined,
       live: points ?? undefined,
       score,
@@ -189,9 +202,13 @@ export function createPoseEngine(cfg: EngineConfig): Engine {
     lastPose = pose;
 
     const points = smoothPoints(pose?.points ?? {}, now);
-    const visible = hasTorso(points);
+    // Shoulders are enough: with the hips out of sight (sitting, a shot cut at the waist) the torso is estimated.
+    const visible = hasUpperBody(points);
     const aspect = size.width / size.height;
     const measured = visible ? matchAll(points, template.points, box, aspect, cfg.mode, pose?.world) : { pose: null, framing: null };
+    // The target shape stands on the person: same torso place and size, so only the limbs differ.
+    const anchored = visible ? anchoredBox(points, template.points, aspect) : null;
+    ghostBox = anchored ? (ghostBox ? easeBox(ghostBox, anchored, FOLLOW) : anchored) : null;
 
     // Face signals near a match only, every other frame; keep the last reading briefly.
     frame += 1;

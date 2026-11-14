@@ -96,6 +96,12 @@ export interface GuideFrame {
   map: ViewMap;
   /** Where the subject should be, in normalised image coordinates. */
   targetBox?: Box;
+  /**
+   * Where to draw the target shape: on the live person (see anchoredBox), so it
+   * follows them and only the limbs differ. The shape is moved from the target
+   * box by its centre, top and height. Defaults to the target box.
+   */
+  ghostBox?: Box;
   /** Pose template to draw inside the target box (as a body shape). */
   ghost?: PosePoints;
   /** Live body points in normalised image coordinates. Missing points are skipped. */
@@ -240,24 +246,39 @@ export function drawGuides(ctx: CanvasRenderingContext2D, frame: GuideFrame): vo
 
   const target =
     frame.targetSilhouette ?? (frame.ghost && frame.targetBox ? figureFor(frame.ghost, frame.targetBox, aspect) : undefined);
-  if (target) drawTarget(ctx, target, map, t, matched);
+  const move = frame.ghostBox && frame.targetBox ? moveBetween(frame.targetBox, frame.ghostBox) : SAME_PLACE;
+  if (target) drawTarget(ctx, target, map, t, matched, move);
   if (frame.targetBox) drawTargetBox(ctx, frame.targetBox, map, t);
   if (frame.silhouette) drawLiveOutline(ctx, frame.silhouette, map, t);
   if (frame.live) drawLiveSkeleton(ctx, frame.live, map, matched, frame.highlight ?? []);
   if (typeof frame.levelErrorDeg === "number") drawLevel(ctx, frame.levelErrorDeg, map);
 }
 
-/** Paints an image that covers the whole camera picture. */
-function drawOverPicture(ctx: CanvasRenderingContext2D, image: HTMLCanvasElement, map: ViewMap): void {
-  ctx.drawImage(image, map.x(0), map.y(0), map.imgW * map.scale, map.imgH * map.scale);
+/** Moves normalised image points: identity, or from one box onto another. */
+type Move = (x: number, y: number) => Point2;
+const SAME_PLACE: Move = (x, y) => [x, y];
+
+/** Puts what sits in `from` onto `to`: same horizontal centre and top, scaled by the heights (evenly in both axes). */
+function moveBetween(from: Box, to: Box): Move {
+  const s = to.h / Math.max(1e-6, from.h);
+  const ax = from.x + from.w / 2;
+  const gx = to.x + to.w / 2;
+  return (x, y) => [gx + (x - ax) * s, to.y + (y - from.y) * s];
 }
 
-function drawTarget(ctx: CanvasRenderingContext2D, mask: SilhouetteMask, map: ViewMap, t: number, matched: boolean): void {
+/** Paints an image that covers the whole camera picture, moved like the target shape. */
+function drawOverPicture(ctx: CanvasRenderingContext2D, image: HTMLCanvasElement, map: ViewMap, move: Move = SAME_PLACE): void {
+  const [x0, y0] = move(0, 0);
+  const [x1, y1] = move(1, 1);
+  ctx.drawImage(image, map.x(x0), map.y(y0), (x1 - x0) * map.imgW * map.scale, (y1 - y0) * map.imgH * map.scale);
+}
+
+function drawTarget(ctx: CanvasRenderingContext2D, mask: SilhouetteMask, map: ViewMap, t: number, matched: boolean, move: Move): void {
   const fills = maskFills(mask);
   ctx.save();
   ctx.imageSmoothingEnabled = true;
   ctx.globalAlpha = matched ? 0.24 : 0.16;
-  drawOverPicture(ctx, matched ? fills.green : fills.white, map);
+  drawOverPicture(ctx, matched ? fills.green : fills.white, map, move);
   ctx.globalAlpha = 1;
   ctx.setLineDash([9, 7]);
   ctx.lineWidth = 2.5;
@@ -266,17 +287,20 @@ function drawTarget(ctx: CanvasRenderingContext2D, mask: SilhouetteMask, map: Vi
   ctx.strokeStyle = guideColour(t, 0.95);
   ctx.shadowColor = "rgba(0, 0, 0, 0.45)";
   ctx.shadowBlur = 4;
-  traceMask(ctx, mask, map);
+  traceMask(ctx, mask, map, move);
   ctx.stroke();
   ctx.restore();
 }
 
 /** Strokes every outline of a mask as one path, mapped onto the view. */
-function traceMask(ctx: CanvasRenderingContext2D, mask: SilhouetteMask, map: ViewMap): void {
+function traceMask(ctx: CanvasRenderingContext2D, mask: SilhouetteMask, map: ViewMap, move: Move = SAME_PLACE): void {
   ctx.beginPath();
   for (const line of contourOf(mask)) {
-    ctx.moveTo(map.x(line[0]), map.y(line[1]));
-    for (let i = 2; i < line.length; i += 2) ctx.lineTo(map.x(line[i]), map.y(line[i + 1]));
+    for (let i = 0; i < line.length; i += 2) {
+      const [x, y] = move(line[i], line[i + 1]);
+      if (i === 0) ctx.moveTo(map.x(x), map.y(y));
+      else ctx.lineTo(map.x(x), map.y(y));
+    }
   }
 }
 

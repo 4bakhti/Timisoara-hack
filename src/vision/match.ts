@@ -196,22 +196,52 @@ function poseCorrections(live: PoseFeatures, target: PoseFeatures): Correction[]
 export interface FramingMatch {
   /** 0–100. */
   score: number;
-  /** Live size divided by wanted size. Above 1 = the person is too large in the frame. */
+  /** The person's figure height divided by the idea's box height. Above 1 = larger than the idea's figure. */
   sizeRatio: number;
-  /** Offset of the person from where they should be, as fractions of the frame. Positive = right / down. */
+  /** Person's centre minus the box centre, and head line minus the box top, as fractions of the frame. Positive = right / down. */
   dx: number;
   dy: number;
   corrections: Correction[];
 }
 
-const POSITION_TOL = 0.07;
-const SIZE_TOL = 0.16;
+/** Inside these the framing counts as right: close enough to the idea, never the exact spot. */
+const POSITION_TOL = 0.12;
+const SIZE_TOL = Math.log(1.3);
+/** At these the framing scores zero. */
+const POSITION_SPAN = 0.32;
+const SIZE_SPAN = Math.log(2.2);
+/** The top of the head above the template's top points (eyes, ears), as a share of the figure's height. */
+const HEAD_ABOVE_TOP = 0.07;
+/** The soles below the ankles, as a share of the figure's height. */
+const FEET_BELOW_ANKLES = 0.03;
+/** An idea whose box reaches this far down is cut at the bottom of the frame on purpose (upper body, three-quarter). */
+const CUT_AT_BOTTOM = 0.95;
 
 /**
- * Compares where the person is with where the idea wants them.
+ * The box that puts the template's torso onto the live person's torso, same centre
+ * and torso length: where the whole target figure stands on this person. The coach
+ * draws the target shape there, so it follows the person, and framing reads it to
+ * see where their head and feet are. Works with the hips out of sight too.
+ */
+export function anchoredBox(live: LivePoints, template: PosePoints, aspect: number): Box | null {
+  const body = bodyPlacement(toIsotropic(live, aspect));
+  if (!body) return null;
+  const ref = templatePlacement(template);
+  const h = body.torso / ref.torso;
+  const centreX = (body.centre[0] - (ref.centre[0] - 0.5) * h) / aspect;
+  const w = (0.5 * h) / aspect;
+  return { x: centreX - w / 2, y: body.centre[1] - ref.centre[1] * h, w, h };
+}
+
+/**
+ * Does the person fit the frame the way the idea wants? Close enough is right:
+ * within about 12% of the frame and 30% of the size the score stays 100, and
+ * the coach asks only for clear changes. The head must be in the frame; the
+ * feet too, unless the idea is cut at the bottom (an upper-body or three-quarter
+ * shot, sitting at a table), where being closer than the box is also fine.
  *
  * @param live     live points, image-normalised (0–1 in both axes)
- * @param template the pose template for this idea (gives the expected torso size and place)
+ * @param template the pose template for this idea (gives the figure's proportions)
  * @param box      idea.framing.subjectBox, image-normalised
  * @param aspect   image width / height
  * @param mode     decides who is told to move: the photographer (friend) or the person (solo)
@@ -223,41 +253,50 @@ export function matchFraming(
   aspect: number,
   mode: CoachMode,
 ): FramingMatch | null {
-  const body = bodyPlacement(toIsotropic(live, aspect));
-  if (!body) return null;
-  const ref = templatePlacement(template);
+  const fit = anchoredBox(live, template, aspect);
+  if (!fit) return null;
+  const cutAtBottom = box.y + box.h >= CUT_AT_BOTTOM;
 
-  // Expected torso length and centre, in isotropic coordinates (heights are 0–1).
-  const wantTorso = ref.torso * box.h;
-  const wantX = (box.x + box.w / 2) * aspect + (ref.centre[0] - 0.5) * box.h;
-  const wantY = box.y + ref.centre[1] * box.h;
+  const dx = fit.x + fit.w / 2 - (box.x + box.w / 2);
+  const dy = fit.y - box.y;
+  const sizeRatio = fit.h / box.h;
+  const logSize = Math.log(sizeRatio);
 
-  const sizeRatio = body.torso / wantTorso;
-  const dx = (body.centre[0] - wantX) / aspect;
-  const dy = body.centre[1] - wantY;
+  // Frame edges, as shares of the frame height cut off.
+  const headCut = Math.max(0, HEAD_ABOVE_TOP * fit.h - fit.y);
+  const feetCut = cutAtBottom ? 0 : Math.max(0, fit.y + (1 + FEET_BELOW_ANKLES) * fit.h - 1);
 
-  const positionError = Math.min(1, Math.hypot(dx, dy) / 0.3);
-  const sizeError = Math.min(1, Math.abs(Math.log(sizeRatio)) / Math.log(1.7));
-  const score = Math.round(100 * (1 - Math.min(1, 0.6 * positionError + 0.4 * sizeError)));
+  const over = (error: number, tol: number, span: number) => Math.min(1, Math.max(0, error - tol) / (span - tol));
+  // A cut-off idea only minds a person much smaller than its box; larger is fine while the head is in.
+  const sizeOff = over(cutAtBottom ? -logSize : Math.abs(logSize), SIZE_TOL, SIZE_SPAN);
+  const xOff = over(Math.abs(dx), POSITION_TOL, POSITION_SPAN);
+  // Height in the frame can only be changed by a friend tilting the phone, and only matters at full length.
+  const tiltable = mode === "friend" && !cutAtBottom;
+  const yOff = tiltable ? over(Math.abs(dy), POSITION_TOL, POSITION_SPAN) : 0;
+  const edgeOff = Math.min(1, (headCut + feetCut) / 0.15);
+  const score = Math.round(100 * (1 - Math.min(1, 0.45 * sizeOff + 0.35 * xOff + 0.2 * yOff + 0.6 * edgeOff)));
 
   const corrections: Correction[] = [];
-  const sizeOver = Math.abs(sizeRatio - 1) - SIZE_TOL;
-  if (sizeOver > 0) {
-    const tooLarge = sizeRatio > 1;
+  const cut = headCut > 0 || feetCut > 0;
+  const sizeRight = Math.abs(logSize) <= SIZE_TOL || (cutAtBottom && logSize > 0);
+  // Cut at an edge while the size is right: the person sits too high or low, and a friend can tilt.
+  const tiltFixes = tiltable && sizeRight && cut;
+  const tooLarge = !tiltFixes && (cut || (!cutAtBottom && logSize > SIZE_TOL));
+  const tooSmall = logSize < -SIZE_TOL;
+  if (tooLarge || tooSmall) {
     const id: PhraseId = mode === "solo" ? (tooLarge ? "step_back" : "come_closer") : tooLarge ? "cam_back" : "cam_closer";
-    corrections.push({ id, weight: 1.6 + Math.min(1, sizeOver / 0.5) });
+    corrections.push({ id, weight: 1.6 + Math.max(edgeOff, sizeOff) });
   }
-  const xOver = Math.abs(dx) - POSITION_TOL;
-  if (xOver > 0) {
+  if (Math.abs(dx) > POSITION_TOL) {
     // Person too far to image right: pan the phone right, or the person steps to their own right.
     const right = dx > 0;
     const id: PhraseId = mode === "solo" ? (right ? "move_right" : "move_left") : right ? "cam_right" : "cam_left";
-    corrections.push({ id, weight: 1.3 + Math.min(1, xOver / 0.3) });
+    corrections.push({ id, weight: 1.3 + xOff });
   }
-  const yOver = Math.abs(dy) - POSITION_TOL;
-  if (yOver > 0 && mode === "friend") {
-    // Person too low in the frame: tilt the phone down. A propped phone cannot be tilted.
-    corrections.push({ id: dy > 0 ? "cam_down" : "cam_up", weight: 1.2 + Math.min(1, yOver / 0.3) });
+  if (tiltable && !tooLarge && (tiltFixes || Math.abs(dy) > POSITION_TOL)) {
+    // Person too low in the frame (or feet cut): tilt the phone down. A propped phone cannot be tilted.
+    const down = headCut > 0 ? false : feetCut > 0 || dy > 0;
+    corrections.push({ id: down ? "cam_down" : "cam_up", weight: 1.2 + Math.max(yOff, edgeOff) });
   }
   corrections.sort((a, b) => b.weight - a.weight);
   return { score, sizeRatio, dx, dy, corrections };
