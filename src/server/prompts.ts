@@ -83,3 +83,19 @@ export function previewPrompt(idea: ShotIdea, pose: Pick<PoseTemplate, "describe
     .filter(Boolean)
     .join("\n");
 }
+
+/** The pose camera: one photo in, the best catalog poses for this person here out. */
+export function poseSystem(): string {
+  return `You pick poses for a camera app. You see one photo from the camera: usually a person, and the place around them.
+
+Return "poses": the ids of the four poses from the list that would make the best photo of this person here, best first.
+- Keep the person where they are. If they are sitting, or only their head and upper body show, choose only poses tagged half-body or sitting. Never a pose that needs them to stand up or step back.
+- Use a leaning pose only if there is something right there to lean on, and a sitting pose only if they sit or a seat is right there.
+- Prefer poses that suit the place and the light. Give four different poses.
+- If nobody is visible, choose poses for one person standing in this place.`;
+}
+
+export function poseUser(): string {
+  const poses = POSE_TEMPLATE_INFO.map((p) => `- ${p.id}: ${p.describe} [${p.tags.join(", ")}]`).join("\n");
+  return `Available poses:\n${poses}\n\nChoose four poses for this photo.`;
+}

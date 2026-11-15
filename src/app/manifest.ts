@@ -7,7 +7,7 @@ export default function manifest(): MetadataRoute.Manifest {
     short_name: APP_NAME,
     description: APP_TAGLINE.en,
     lang: "en",
-    start_url: "/shoot",
+    start_url: "/",
     scope: "/",
     display: "standalone",
     orientation: "portrait",

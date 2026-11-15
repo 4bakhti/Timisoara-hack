@@ -1,5 +1,6 @@
-import { HomeScreen } from "@/components/HomeScreen";
+import { PoseCamera } from "@/components/PoseCamera";
 
-export default function Home() {
-  return <HomeScreen />;
+/** The app opens straight onto the pose camera. */
+export default function Camera() {
+  return <PoseCamera />;
 }

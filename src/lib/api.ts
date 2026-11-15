@@ -10,6 +10,7 @@
 import type { ZodType } from "zod";
 import {
   AnalyzeResponse,
+  PoseResponse,
   GuideResponse,
   Health,
   PairCreateResponse,
@@ -56,11 +57,12 @@ async function request<T>(path: string, schema: ZodType<T>, init?: RequestInit):
   return schema.parse(await res.json());
 }
 
-function post<T>(path: string, body: unknown, schema: ZodType<T>): Promise<T> {
+function post<T>(path: string, body: unknown, schema: ZodType<T>, signal?: AbortSignal): Promise<T> {
   return request(path, schema, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
+    signal,
   });
 }
 
@@ -96,6 +98,15 @@ export const api = {
       return await post("/api/analyze", req, AnalyzeResponse);
     } catch {
       return { plan: samplePlan(req.lang), mock: true };
+    }
+  },
+
+  /** The best poses for the person in this camera photo, best first; null when the AI cannot answer. */
+  async pose(image: string, signal?: AbortSignal): Promise<string[] | null> {
+    try {
+      return (await post("/api/pose", { image }, PoseResponse, signal)).poses;
+    } catch {
+      return null;
     }
   },
 

@@ -399,3 +399,15 @@ export const ApiError = z.object({
   message: z.string().optional(),
 });
 export type ApiError = z.infer<typeof ApiError>;
+
+/* ------------------------------------------------------------ API: /api/pose */
+
+/** One camera photo in; the poses that would suit this person here, best first. No text. */
+export const PoseRequest = z.object({ image: ImageData });
+export type PoseRequest = z.infer<typeof PoseRequest>;
+
+export const PoseResponse = z.object({
+  /** Pose template ids from the catalog, best first. */
+  poses: z.array(z.string()).min(1).max(6),
+});
+export type PoseResponse = z.infer<typeof PoseResponse>;
